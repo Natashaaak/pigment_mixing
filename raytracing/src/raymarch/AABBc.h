@@ -22,7 +22,7 @@ public:
      * @param spph simulation
      * @param scene scene number from 3 predifined scenes
      */
-    AABBc(SPHIntegrationSim *spph, int scene);
+    AABBc(SPHIntegrationSim *spph);
     float voxelS = 0;
     glm::vec3 gridStart = glm::vec3(0);
     glm::uint cellsX = 0, cellsY = 0, cellsZ = 0;
@@ -37,9 +37,8 @@ private:
     /**
      * Chooses what boundary to use depending on the scene and computes all the parameters
      * @param spph simulation
-     * @param scene number of the scene
      */
-    void fixedAABB(SPHIntegrationSim *spph, int scene);
+    void fixedAABB(SPHIntegrationSim *spph);
 };
 
 

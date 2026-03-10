@@ -157,7 +157,7 @@ void physicsInit(const std::string& name) {
  * @param load scene file to load
  * @param scene scene id
  */
-void guiStart(bool &start, std::string &load, int &scene) {
+void guiStart(bool &start, std::string &load) {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -176,34 +176,10 @@ void guiStart(bool &start, std::string &load, int &scene) {
     ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - bw) * 0.5f, (vp->WorkSize.y - totalH) * 0.5f));
 
     ImGui::BeginGroup();
-    if (ImGui::Button("Load Dam Break scene", ImVec2(bw, bh))) {
+    if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
         load = std::string(EXTERNAL_DATA_PATH) + "/Scenes/DamBreakModel.json";
-        scene = 1;
         start = true;
     }
-    ImGui::Spacing();
-    if (ImGui::Button("Load Double Dam break scene", ImVec2(bw, bh))) {
-        load = "../data/Scenes/DoubleDamBreak.json";
-        scene = 2;
-        camera->setPos(camera->cameraPos - (1.5f * camera->camForward));
-        state.e2 = 0.000583;
-        state.e1 = 0.000245;
-        state.A = 0.523;
-        state.B = 0.741;
-        start = true;
-    }
-    ImGui::Spacing();
-    if (ImGui::Button("Load Motor scene", ImVec2(bw, bh))) {
-        load = "../data/Scenes/MotorScene.json";
-        scene = 3;
-        state.e2 = 0.000574;
-        state.e1 = 0.000153;
-        state.A = 0.570;
-        state.B = 0.6;
-        camera->setPos(camera->cameraPos - camera->camForward);
-        start = true;
-    }
-
     ImGui::Dummy(ImVec2(0, 60));
 
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
@@ -406,7 +382,6 @@ int mainComputeLoop() {
     ctimer.init();
     bool startScene = false;
     std::string load;
-    int scene = 0;
     while(!glfwWindowShouldClose(window)) {
         if (startScene)
             timer.update();
@@ -416,11 +391,11 @@ int mainComputeLoop() {
         glDepthFunc(GL_LESS);
         glDepthMask(GL_TRUE);
         if (!startScene) {
-            guiStart(startScene, load, scene);
+            guiStart(startScene, load);
             if (!load.empty()) {
                 state.changeFontSize = true;
                 physicsInit(load);
-                a = new AABBc(spph, scene);
+                a = new AABBc(spph);
                 rm = new RayMarch(spph, a);
             }
         }

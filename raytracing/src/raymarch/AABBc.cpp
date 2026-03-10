@@ -3,31 +3,20 @@
 #include <glm/common.hpp>
 
 
-AABBc::AABBc(SPHIntegrationSim *spph, int scene) {
-    fixedAABB(spph, scene);
+AABBc::AABBc(SPHIntegrationSim *spph) {
+    fixedAABB(spph);
 }
 
 
-void AABBc::fixedAABB(SPHIntegrationSim *spph, int scene) {
+void AABBc::fixedAABB(SPHIntegrationSim *spph) {
     voxelS = spph->getSupportRadius();
     glm::vec3 max(1);
     glm::vec3 min(1);
-    switch (scene) {
-        case 1:
-            min = {-1.35, -0.2, -0.85};
-            max = {1.35, 3.1, 0.85};
-            break;
-        case 2:
-            min = {-1.65, -0.2, -1.65};
-            max = {1.65, 3.2, 1.65};
-            break;
-        case 3:
-            min = {-1.1, -0.2, -1.1};
-            max = {1.1, 2.1, 1.1};
-            break;
-        default:
-            break;
-    }
+
+    // TODO: change based on number of selected colors
+    min = {-1.35, -0.2, -0.85};
+    max = {1.35, 3.1, 0.85};
+
     extent = max - min;
     gridStart = glm::floor(min / voxelS) * voxelS;
     cellsX = std::ceil(extent.x / voxelS) + 1;
