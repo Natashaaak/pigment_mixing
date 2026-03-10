@@ -1,0 +1,4 @@
+[2026-03-09 15:13:33.390] [logger] [debug] GPU did not finish computes for Whole GPU pass
+[2026-03-09 15:13:33.569] [logger] [debug] Changing size of textures for output texture of ray tracing to 1600 900
+[2026-03-09 15:13:33.622] [logger] [debug] Changing size of textures for depth maps to 1600 900
+[2026-03-09 15:13:33.961] [logger] [debug] GPU did not finish computes for Whole GPU pass

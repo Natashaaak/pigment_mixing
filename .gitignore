@@ -1,0 +1,34 @@
+# Build directories
+build/
+bin/
+
+# Simulations output
+**/output/
+**/results/
+
+# Dependencies (for Matter)
+**/deps/
+
+# Executables & Libraries
+*.exe
+*.out
+*.app
+*.so
+*.a
+*.lib
+*.dll
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+*:Zone.Identifier
+
+# CMake cache
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile

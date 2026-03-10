@@ -1,0 +1,61 @@
+//----------------------------------------------------------------------------------------
+/**
+ * \file       RayMarch.h
+ * \brief      Ray marching pipeline class
+ *
+ *  Calls all other classes connected to ray marching pipeline and dispatches ray marching shader
+ *
+ */
+//----------------------------------------------------------------------------------------
+
+#ifndef RAYMARCH_H
+#define RAYMARCH_H
+#include "AABBc.h"
+#include "BinaryDensityGrid.h"
+#include "DepthProcessor.h"
+
+
+class RayMarch {
+public:
+    RayMarch(SPHIntegrationSim *spph, AABBc *a);
+    ~RayMarch();
+    AABBc* getA() const;
+
+    /**
+     * Starts the pipeline, calls all other steps, then performs ray marching and billinear interpolation
+     * @param ww framebuffer width
+     * @param wh framebuffer height
+     * @param spph simulation
+     * @param camera camera object
+     */
+    void march(GLint ww, GLint wh, SPHIntegrationSim *spph, Camera* camera);
+private:
+    void initShader();
+    void texQuadInit();
+    void bindSpheres(SPHIntegrationSim *spph);
+    void createOutputTexture();
+
+    /**
+     * Resizes textures to new framebuffer sizes
+     * @param ww framebuffer width
+     * @param wh framebuffer height
+     */
+    void resizeTexutres(GLint ww, GLint wh);
+
+    /**
+     * Renders final texture
+     */
+    void renderTex();
+    DepthProcessor *depthMaps;
+    BinaryDensityGrid *bdg;
+    AABBc *a;
+    Shader *shader, *texShader, *interpolation;
+    GLuint spheresSSBO = 0, outputTex = 0, quadVAO = 0, quadVBO = 0, normalDepthTex = 0;
+    int start = 0;
+    const float floorCol[4] = {0.375f, 0.35f, 0.325f, 1.0f};
+    const float clearData[4] = {1000.0f, 1000.0f, 1000.0f, 1000.0f};
+};
+
+
+
+#endif //RAYMARCH_H

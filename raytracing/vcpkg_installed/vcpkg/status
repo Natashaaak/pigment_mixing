@@ -1,0 +1,57 @@
+Package: vcpkg-cmake-config
+Version: 2024-05-23
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 938b5e1dc7ceacf08654bef246055524d658786b56f39c96f3b23d2de8d063d3
+Status: install ok installed
+
+Package: vcpkg-cmake
+Version: 2024-04-23
+Architecture: x64-linux
+Multi-Arch: same
+Abi: f7cbaf4a1eecbbb1579be1e8dbbd016626910498335b8370236a4219615937b6
+Status: install ok installed
+
+Package: egl-registry
+Version: 2025-05-27
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 92600c81d438e47cabc04d31b5fa445594b7eaa3be4e4d79693ef2be4c2ee325
+Description: EGL API and Extension Registry
+Status: install ok installed
+
+Package: opengl-registry
+Version: 2026-01-26
+Depends: egl-registry
+Architecture: x64-linux
+Multi-Arch: same
+Abi: f524b55af46a124841ec8d4a178f40ce0d0ebda471c00fdf79d0876c7fa19fa2
+Description: OpenGL, OpenGL ES, and OpenGL ES-SC API and Extension Registry
+Status: install ok installed
+
+Package: glad
+Version: 0.1.36
+Depends: egl-registry, opengl-registry, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 866fd4ac3ad58a24efadc76ede3f051a1441017a1b3be15045e499cdfe988ed1
+Description: Multi-Language Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator based on the official specs.
+Default-Features: loader
+Status: install ok installed
+
+Package: glad
+Feature: loader
+Architecture: x64-linux
+Multi-Arch: same
+Description: Generate loader logic.
+Status: install ok installed
+
+Package: glm
+Version: 1.0.3
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: c312e6db49596ebd72cf7f7647f9e0cdd788f0217eedb373ceee95504b110ad6
+Description: OpenGL Mathematics (GLM)
+Status: install ok installed
+
