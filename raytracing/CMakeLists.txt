@@ -49,8 +49,6 @@ add_executable(GLHydroSurface
         src/main.cpp
         src/Shader.h
         src/Camera.h
-        src/march/MarchingCubes.h
-        src/march/MarchingCubes.cpp
         imgui/imgui.cpp
         imgui/imgui_draw.cpp
         imgui/imgui_tables.cpp

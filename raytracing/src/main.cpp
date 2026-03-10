@@ -12,7 +12,6 @@
 
 #include "Camera.h"
 #include "PassTimer.h"
-#include "march/MarchingCubes.h"
 #include "raymarch/BinaryDensityGrid.h"
 #include "raymarch/RayMarch.h"
 #include "spdlog/sinks/basic_file_sink.h"
@@ -21,7 +20,6 @@
 
 GLFWwindow* window;
 
-MarchingCubes *mc;
 RayMarch *rm;
 Camera *camera;
 SPHIntegrationSim *spph;
@@ -141,14 +139,7 @@ void renderSpheres() {
     glfwGetFramebufferSize(window, &ww, &wh);
     auto& spheresData = spph->getParticles();
 
-    if (state.rayMarch) {
-        rm->march(ww, wh, spph, camera);
-    }
-    if (state.startMarch) {
-        mc->countAABB(spheresData);
-        mc->computeDensity(spheresData, spph->getParticleAmount(), spph);
-        mc->march(camera);
-    }
+    rm->march(ww, wh, spph, camera);
 }
 
 /**
@@ -249,37 +240,8 @@ void gui() {
 
     ImGui::BeginChild("Settings", ImVec2(28*state.fonts[state.fontChoice], 0), true);
 
-    ImGui::Text("Select Renderer:");
-    if (ImGui::BeginCombo("##Selectrenderer", state.items[state.currentChoice].c_str())) {
-        for (int i = 0; i < state.items.size(); ++i) {
-            bool isSelected = (state.currentChoice == i);
-            if (ImGui::Selectable(state.items[i].c_str(), isSelected)) {
-                state.currentChoice = i;
-                switch (state.currentChoice) {
-                    case 0:
-                        spdlog::info("Marching cubes are rendering!");
-                        state.rayTrace = false;
-                        state.rayMarch = false;
-                        state.startMarch = true;
-                        break;
-                    case 1:
-                        spdlog::info("Ray marching is rendering!");
-                        state.rayTrace = false;
-                        state.rayMarch = true;
-                        state.startMarch = false;
-                        break;
-                    default: ;
-                }
-            }
-            if (isSelected) {
-                ImGui::SetItemDefaultFocus();
-            }
-        }
-        ImGui::EndCombo();
-        ImGui::Spacing();
-        ImGui::Spacing();
-    }
-    if (state.startMarch) {
+    
+    if (ImGui::CollapsingHeader("Iso Value", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("Auto ISO:");
         if (ImGui::Checkbox("##AutoISO", &state.autoISO)) {
             if (state.autoISO) {
@@ -289,20 +251,83 @@ void gui() {
                 state.iso = state.kern/(h*h*h)*pow(1.0f - q*q, 3);
             }
         }
-
         ImGui::BeginDisabled(state.autoISO);
         ImGui::Text("ISO:");
-        ImGui::SliderFloat("##ISO", &state.iso, 0.01f, 500);
+        ImGui::SliderFloat("##ISO", &state.iso, 0.01f, 5000);
         ImGui::EndDisabled();
+    }
+    ImGui::Spacing();
+    ImGui::Spacing();
+    if (ImGui::CollapsingHeader("Ray Marching parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Max amount of steps for a ray:");
+        if (ImGui::SliderInt("##Maxstepcount", &state.maxStepCount, 10, 1000)) {
+            if (state.maxSkipCount > state.maxStepCount - state.stepsInside) {
+                state.maxSkipCount = state.maxStepCount - state.stepsInside;
+            }
+        }
 
-        ImGui::Text("One axis size of the voxel grid:");
-        ImGui::SliderInt("##Sizeofthegrid", &state.gridSize, 16, state.maxGridResolution);
+        ImGui::Text("Max amount of steps before skip to aggregation:");
+        ImGui::SliderInt("##maxSkip", &state.maxSkipCount, 6, state.maxStepCount - state.stepsInside);
 
-        ImGui::Text("Use Anisotropic kernel:");
-        ImGui::Checkbox("##UseAnisotropickernel", &state.useAnisotropicKer);
+        ImGui::Text("Amount of steps inside possible cell:");
+        ImGui::SliderInt("##Stepsinside ", &state.stepsInside, 2, 50);
+    }
+    ImGui::Spacing();
+    ImGui::Spacing();
+    if (ImGui::CollapsingHeader("Binary Density Grid construction", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Factor a for BDG construction:");
+        if (ImGui::SliderFloat("##afactor", &state.params.x, 0.02f, 1.0f, "%.2f")) {
+            if (state.params.y > state.params.x - 0.01f) {
+                state.params.y = state.params.x - 0.01f;
+            }
+        }
 
-        ImGui::Text("Eigen values max ratio diff:");
-        ImGui::SliderFloat("##Kfactor", &state.k, 1.0f, 100.0f);
+        ImGui::Text("Factor b for BDG construction:");
+        ImGui::SliderFloat("##bfactor", &state.params.y, 0.01f, state.params.x-0.01f, "%.2f");
+    }
+    ImGui::Spacing();
+    ImGui::Spacing();
+    if (ImGui::CollapsingHeader("Normals blending", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("A factor for normals blending:");
+        ImGui::SliderFloat("##Afactor", &state.A, 0.05f, 1.0f);
+
+        ImGui::Text("B factor for normals blending:");
+        ImGui::SliderFloat("##Bfactor", &state.B, 0.05f, 1.0f);
+
+    }
+    ImGui::Spacing();
+    ImGui::Spacing();
+    if (ImGui::CollapsingHeader("Depth Variance", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::PushID(0);
+        ImGui::Text("Full to half resolution threshold:");
+        ImGui::SliderFloat("##FullToHalf", &state.e2, 0.000001f, 0.05f, "%.6f");
+        ImGui::SameLine();
+        if (ImGui::Button("-", ImVec2(30, 0))) {
+            state.e2 -= 0.000001;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("+", ImVec2(30, 0))) {
+            state.e2 += 0.000001;
+        }
+        ImGui::PopID();
+        ImGui::PushID(1);
+        ImGui::Text("Half to quarter resolution threshold:");
+        ImGui::SliderFloat("##HalfToQuarter", &state.e1, 0.000005f, 0.05f, "%.6f");
+        ImGui::SameLine();
+        if (ImGui::Button("-", ImVec2(30, 0))) {
+            state.e1 -= 0.000001;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("+", ImVec2(30, 0))) {
+            state.e1 += 0.000001;
+        }
+        ImGui::PopID();
+    }
+    ImGui::Spacing();
+    ImGui::Spacing();
+    if (ImGui::CollapsingHeader("Anisotropy for surface construction", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Anisotropy for rendering:");
+        ImGui::Checkbox("##Anisotropy", &state.isAni);
 
         ImGui::Text("Auto scale factor for anisotropy:");
         ImGui::Checkbox("##AutoSfactor", &state.autoScaleS);
@@ -312,148 +337,32 @@ void gui() {
         ImGui::SliderFloat("##Sfactor", &state.s, 1.0f, 2400.0f);
         ImGui::EndDisabled();
 
-        ImGui::BeginDisabled(!state.useAnisotropicKer);
+        ImGui::BeginDisabled(!state.isAni);
         ImGui::Text("Anisotropy threshold:");
         ImGui::SliderInt("##Anisotropythreshold", &state.aniso_threshold, 2, 25);
         ImGui::EndDisabled();
-
-        ImGui::Text("Face culling:");
-        if (ImGui::Checkbox("##Cullface", &state.faceCulling)) {
-            if (state.faceCulling) {
-                spdlog::info("Turned on face culling");
-                glCullFace(GL_BACK);
-                glEnable(GL_CULL_FACE);
-            }
-            else {
-                spdlog::info("Turned off face culling");
-                glDisable(GL_CULL_FACE);
-            }
-        }
     }
-    if (state.rayMarch) {
-        if (ImGui::CollapsingHeader("Iso Value", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Text("Auto ISO:");
-            if (ImGui::Checkbox("##AutoISO", &state.autoISO)) {
-                if (state.autoISO) {
-                    float h = spph->getSupportRadius();
-                    state.vdall = 0.8f * h;
-                    float q = state.vdall/h;
-                    state.iso = state.kern/(h*h*h)*pow(1.0f - q*q, 3);
-                }
-            }
-            ImGui::BeginDisabled(state.autoISO);
-            ImGui::Text("ISO:");
-            ImGui::SliderFloat("##ISO", &state.iso, 0.01f, 5000);
-            ImGui::EndDisabled();
-        }
-        ImGui::Spacing();
-        ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Ray Marching parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Text("Max amount of steps for a ray:");
-            if (ImGui::SliderInt("##Maxstepcount", &state.maxStepCount, 10, 1000)) {
-                if (state.maxSkipCount > state.maxStepCount - state.stepsInside) {
-                    state.maxSkipCount = state.maxStepCount - state.stepsInside;
-                }
-            }
+    ImGui::Spacing();
+    ImGui::Spacing();
+    if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Max aggregated blocks one axis:");
+        ImGui::Combo("##maxAggr", &state.currRes, " 1\0 2\0 4\0\0");
 
-            ImGui::Text("Max amount of steps before skip to aggregation:");
-            ImGui::SliderInt("##maxSkip", &state.maxSkipCount, 6, state.maxStepCount - state.stepsInside);
+        ImGui::Text("Visible spheres:");
+        ImGui::Checkbox("##seeSpheres", &state.seeSpheres);
 
-            ImGui::Text("Amount of steps inside possible cell:");
-            ImGui::SliderInt("##Stepsinside ", &state.stepsInside, 2, 50);
-        }
-        ImGui::Spacing();
-        ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Binary Density Grid construction", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Text("Factor a for BDG construction:");
-            if (ImGui::SliderFloat("##afactor", &state.params.x, 0.02f, 1.0f, "%.2f")) {
-                if (state.params.y > state.params.x - 0.01f) {
-                    state.params.y = state.params.x - 0.01f;
-                }
-            }
-
-            ImGui::Text("Factor b for BDG construction:");
-            ImGui::SliderFloat("##bfactor", &state.params.y, 0.01f, state.params.x-0.01f, "%.2f");
-        }
-        ImGui::Spacing();
-        ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Normals blending", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Text("A factor for normals blending:");
-            ImGui::SliderFloat("##Afactor", &state.A, 0.05f, 1.0f);
-
-            ImGui::Text("B factor for normals blending:");
-            ImGui::SliderFloat("##Bfactor", &state.B, 0.05f, 1.0f);
-
-        }
-        ImGui::Spacing();
-        ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Depth Variance", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::PushID(0);
-            ImGui::Text("Full to half resolution threshold:");
-            ImGui::SliderFloat("##FullToHalf", &state.e2, 0.000001f, 0.05f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-", ImVec2(30, 0))) {
-                state.e2 -= 0.000001;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("+", ImVec2(30, 0))) {
-                state.e2 += 0.000001;
-            }
-            ImGui::PopID();
-            ImGui::PushID(1);
-            ImGui::Text("Half to quarter resolution threshold:");
-            ImGui::SliderFloat("##HalfToQuarter", &state.e1, 0.000005f, 0.05f, "%.6f");
-            ImGui::SameLine();
-            if (ImGui::Button("-", ImVec2(30, 0))) {
-                state.e1 -= 0.000001;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("+", ImVec2(30, 0))) {
-                state.e1 += 0.000001;
-            }
-            ImGui::PopID();
-        }
-        ImGui::Spacing();
-        ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Anisotropy for surface construction", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Text("Anisotropy for rendering:");
-            ImGui::Checkbox("##Anisotropy", &state.isAni);
-
-            ImGui::Text("Auto scale factor for anisotropy:");
-            ImGui::Checkbox("##AutoSfactor", &state.autoScaleS);
-
-            ImGui::BeginDisabled(state.autoScaleS);
-            ImGui::Text("Scale factor for anisotropy:");
-            ImGui::SliderFloat("##Sfactor", &state.s, 1.0f, 2400.0f);
-            ImGui::EndDisabled();
-
-            ImGui::BeginDisabled(!state.isAni);
-            ImGui::Text("Anisotropy threshold:");
-            ImGui::SliderInt("##Anisotropythreshold", &state.aniso_threshold, 2, 25);
-            ImGui::EndDisabled();
-        }
-        ImGui::Spacing();
-        ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Text("Max aggregated blocks one axis:");
-            ImGui::Combo("##maxAggr", &state.currRes, " 1\0 2\0 4\0\0");
-
-            ImGui::Text("Visible spheres:");
-            ImGui::Checkbox("##seeSpheres", &state.seeSpheres);
-
-            ImGui::Text("See tiles resolution:");
-            ImGui::Checkbox("##TilesRes", &state.debugMode);
-            //Are used for scene testing, uncomment to be able to test accelerations.
-            // ImGui::Text("All cells are valid:");
-            // if (ImGui::Checkbox("##cellsValid", &state.testAllFilled)) {
-            //     state.maxStepCount = 9000;
-            //     state.maxSkipCount = 9000;
-            // }
-            //
-            // ImGui::Text("Full res everywhere:");
-            // if (ImGui::Checkbox("##testfullres", &state.testFullRes)) {
-            // }
-        }
+        ImGui::Text("See tiles resolution:");
+        ImGui::Checkbox("##TilesRes", &state.debugMode);
+        //Are used for scene testing, uncomment to be able to test accelerations.
+        // ImGui::Text("All cells are valid:");
+        // if (ImGui::Checkbox("##cellsValid", &state.testAllFilled)) {
+        //     state.maxStepCount = 9000;
+        //     state.maxSkipCount = 9000;
+        // }
+        //
+        // ImGui::Text("Full res everywhere:");
+        // if (ImGui::Checkbox("##testfullres", &state.testFullRes)) {
+        // }
     }
     ImGui::Spacing();
     ImGui::Spacing();
@@ -467,10 +376,8 @@ void gui() {
     ImGui::SameLine();
 
     ImGui::BeginChild("---Statistics---", ImVec2(0,0), true);
-    if (state.rayMarch) {
-        timer.plotLine();
-        ctimer.plotLine();
-    }
+    timer.plotLine();
+    ctimer.plotLine();
     ImGui::Separator();
 
 
@@ -478,14 +385,10 @@ void gui() {
     ImGui::Text("Particles: %3d", spph->getParticleAmount());
     ImGui::Text("Particles radius: %.3f", spph->getRadius());
     ImGui::Text("Particles sph radius: %.3f", spph->getSupportRadius());
-    if (state.rayMarch) {
-        ImGui::Text("Cells size: %3d", static_cast<int>(rm->getA()->getSize()));
-        ImGui::Text("There are %3d possible cells", state.count[1]);
-    }
+    ImGui::Text("Cells size: %3d", static_cast<int>(rm->getA()->getSize()));
+    ImGui::Text("There are %3d possible cells", state.count[1]);
 
     ImGui::Text("FPS: %.1f (%.3f ms/frame)", io.Framerate, 1000.0f/io.Framerate);
-    if (state.startMarch)
-        ImGui::Text("Triangles: %3d", state.triCount);
 
     ImGui::EndChild();
 
@@ -517,7 +420,6 @@ int mainComputeLoop() {
             if (!load.empty()) {
                 state.changeFontSize = true;
                 physicsInit(load);
-                mc = new MarchingCubes();
                 a = new AABBc(spph, scene);
                 rm = new RayMarch(spph, a);
             }
@@ -536,7 +438,6 @@ int mainComputeLoop() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     timer.clear();
-    delete mc;
     delete spph;
     delete camera;
     delete rm;

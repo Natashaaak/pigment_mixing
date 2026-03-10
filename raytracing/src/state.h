@@ -13,7 +13,6 @@
 
 #pragma once
 struct State {
-    int gridSize = 64;
     float iso = 0.01f;
     bool debugMode = false;
     glm::uvec3 localGroupSize = glm::uvec3(16, 8, 8);
@@ -22,20 +21,15 @@ struct State {
     GLuint triCount = 0;
     float kern = 315.0f / (64.0f * glm::pi<float>());
     float k = 4.0f;
-    float maxGridResolution = 512.0f;
     float s = 1400.0f;
     int aniso_threshold = 4;
     float isoThresholdForDepthMap = 20.0f;
-    bool useAnisotropicKer = false;
     bool autoISO = false;
     bool rayMarch = true;
     bool startMarch = false;
-    bool rayTrace = false;
     bool recalcMarchParams = true;
     bool play = true;
-    bool faceCulling = false;
     bool changeFontSize = false;
-    int currentChoice = 1;
     int maxStepCount = 180;
     int maxSkipCount = 176;
     int stepsInside = 9;
