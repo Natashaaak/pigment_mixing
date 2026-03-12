@@ -3,11 +3,11 @@
 #include "PassTimer.h"
 
 
-RayMarch::RayMarch(SPHIntegrationSim *spph, AABBc *a) {
+RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     glGenBuffers(1, &spheresSSBO);
     depthMaps = new DepthProcessor();
     this->a = a;
-    bdg = new BinaryDensityGrid(a, spph);
+    bdg = new BinaryDensityGrid(a, mpm);
     initShader();
     texQuadInit();
     createOutputTexture();
@@ -104,14 +104,14 @@ AABBc *RayMarch::getA() const {
     return a;
 }
 
-void RayMarch::bindSpheres(SPHIntegrationSim *spph) {
+void RayMarch::bindSpheres(MPMIntegrationSim *mpm) {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, spheresSSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER,
-        spph->getParticleAmount() * sizeof(glm::vec4),
+        mpm->getParticleAmount() * sizeof(glm::vec4),
         nullptr,
         GL_STREAM_DRAW);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
-        spph->getParticleAmount() * sizeof(glm::vec4), spph->getParticles().data());
+        mpm->getParticleAmount() * sizeof(glm::vec4), mpm->getParticles().data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start, spheresSSBO);
 }
 
@@ -132,20 +132,20 @@ void RayMarch::renderTex() {
 }
 
 
-void RayMarch::march(GLint ww, GLint wh, SPHIntegrationSim *spph, Camera *camera) {
+void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera) {
     //TODO: count time for every step to test for bottlenecks
     resizeTexutres(ww, wh);
     // if (state.play) {
     ctimer.start(1);
-    bdg->fillBDG(a, spph);
+    bdg->fillBDG(a, mpm);
     ctimer.end(1);
-    depthMaps->generateDepthMaps(spph, ww, wh, camera);
+    depthMaps->generateDepthMaps(mpm, ww, wh, camera);
     // timer.start();
     // }
     glClearTexImage(outputTex, 0, GL_RGBA, GL_FLOAT, floorCol);
     glClearTexImage(normalDepthTex, 0, GL_RGBA, GL_FLOAT, clearData);
     shader->use();
-    bindSpheres(spph);
+    bindSpheres(mpm);
 
     glBindImageTexture(0, outputTex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
     glBindImageTexture(1, normalDepthTex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
@@ -163,11 +163,11 @@ void RayMarch::march(GLint ww, GLint wh, SPHIntegrationSim *spph, Camera *camera
     shader->setUniform("maxSkipCount", state.maxSkipCount);
     shader->setUniform("gridStart", a->gridStart);
     shader->setUniform("voxelSize", a->voxelS);
-    shader->setUniform("h", spph->getSupportRadius());
+    shader->setUniform("h", mpm->getSupportRadius());
     // shader->setUniform("DforRIJ", state.vdall);
-    shader->setUniform("DforRIJ", spph->getRadius());
+    shader->setUniform("DforRIJ", mpm->getRadius());
     // shader->setUniform("DforRIJ", state.seeSpheres ? spph->getRadius() : spph->getSupportRadius());
-    shader->setUniform("rad", spph->getRadius());
+    shader->setUniform("rad", mpm->getRadius());
     shader->setUniform("cellsSize", glm::ivec3(a->cellsX, a->cellsY, a->cellsZ));
     shader->setUniform("iso", state.iso);
     shader->setUniform("stepsInside", state.stepsInside);
@@ -196,7 +196,7 @@ void RayMarch::march(GLint ww, GLint wh, SPHIntegrationSim *spph, Camera *camera
         interpolation->use();
         interpolation->setUniform("width", ww);
         interpolation->setUniform("height", wh);
-        interpolation->setUniform("maxdv", spph->getSupportRadius() * 2);
+        interpolation->setUniform("maxdv", mpm->getSupportRadius() * 2);
         glBindImageTexture(0, outputTex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
         glBindImageTexture(1, normalDepthTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
         interpolation->setUniform("stride", 4);

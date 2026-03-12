@@ -203,7 +203,7 @@ void DepthProcessor::bindDepthMaps(int start, Shader* sh) const {
     c->bindBuffers(6);
 }
 
-void DepthProcessor::smoothDall(SPHIntegrationSim *spph, GLint ww, GLint wh, Camera *camera) {
+void DepthProcessor::smoothDall(MPMIntegrationSim *mpm, GLint ww, GLint wh, Camera *camera) {
     gaussBilateral->use();
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, Dall);
@@ -217,10 +217,10 @@ void DepthProcessor::smoothDall(SPHIntegrationSim *spph, GLint ww, GLint wh, Cam
 
     gaussBilateral->setUniform("width", ww);
     gaussBilateral->setUniform("height", wh);
-    gaussBilateral->setUniform("r", state.seeSpheres ? spph->getRadius() : spph->getSupportRadius());
+    gaussBilateral->setUniform("r", state.seeSpheres ? mpm->getRadius() : mpm->getSupportRadius());
     gaussBilateral->setUniform("fov", camera->viewAngle);
     gaussBilateral->setUniform("ks", state.ks);
-    gaussBilateral->setUniform("sigma_r", state.kr * (state.seeSpheres ? spph->getRadius() : spph->getSupportRadius()));
+    gaussBilateral->setUniform("sigma_r", state.kr * (state.seeSpheres ? mpm->getRadius() : mpm->getSupportRadius()));
     gaussBilateral->setUniform("filterR", state.R);
     gaussBilateral->setUniform("dir", glm::ivec2(1, 0));
 
@@ -276,14 +276,14 @@ void DepthProcessor::computeNScreen(GLint ww, GLint wh, Camera *camera) {
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 }
 
-void DepthProcessor::generateDepthMaps(SPHIntegrationSim *spph, GLint ww, GLint wh, Camera *camera) {
+void DepthProcessor::generateDepthMaps(MPMIntegrationSim *mpm, GLint ww, GLint wh, Camera *camera) {
     // depthVarTimer.start();
     idsDagg.clear();
     idsDall.clear();
     ctimer.start(2);
-    c->countDensities(spph, idsDagg, idsDall);
+    c->countDensities(mpm, idsDagg, idsDall);
     ctimer.end(2);
-    buffers(spph);
+    buffers(mpm);
     resizeTextures(ww, wh);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_PROGRAM_POINT_SIZE);
@@ -296,8 +296,8 @@ void DepthProcessor::generateDepthMaps(SPHIntegrationSim *spph, GLint ww, GLint 
     shader->setUniform("view", camera->getView());
     shader->setUniform("proj", camera->getProj());
     shader->setUniform("wh", wh);
-    //using h instead of radius to be able to get sph density
-    shader->setUniform("h", state.seeSpheres ? spph->getRadius() : spph->getSupportRadius());
+    //using h instead of radius to be able to get particles density
+    shader->setUniform("h", state.seeSpheres ? mpm->getRadius() : mpm->getSupportRadius());
     shader->setUniform("isAni", state.isAni);
 
     glBindFramebuffer(GL_FRAMEBUFFER, fboDagg);
@@ -314,7 +314,7 @@ void DepthProcessor::generateDepthMaps(SPHIntegrationSim *spph, GLint ww, GLint 
     glBindVertexArray(0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    smoothDall(spph, ww, wh, camera);
+    smoothDall(mpm, ww, wh, camera);
     computeNScreen(ww, wh, camera);
     computeDepthVar(ww, wh);
 }
@@ -358,20 +358,20 @@ void DepthProcessor::resizeTextures(GLint ww, GLint wh) {
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
 }
 
-void DepthProcessor::buffers(SPHIntegrationSim *spph) {
+void DepthProcessor::buffers(MPMIntegrationSim *mpm) {
     //VBO
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, spph->getParticleAmount() * sizeof(glm::vec4),
+    glBufferData(GL_ARRAY_BUFFER, mpm->getParticleAmount() * sizeof(glm::vec4),
         nullptr, GL_STREAM_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0,
-        spph->getParticleAmount() * sizeof(glm::vec4),spph->getParticles().data());
+        mpm->getParticleAmount() * sizeof(glm::vec4),mpm->getParticles().data());
 
     //VBOMat
     glBindBuffer(GL_ARRAY_BUFFER, VBOMat);
-    glBufferData(GL_ARRAY_BUFFER, spph->getParticleAmount() * sizeof(glm::mat3),
+    glBufferData(GL_ARRAY_BUFFER, mpm->getParticleAmount() * sizeof(glm::mat3),
         nullptr, GL_STREAM_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0,
-        spph->getParticleAmount() * sizeof(glm::mat3), c->getMatricesInv().data());
+        mpm->getParticleAmount() * sizeof(glm::mat3), c->getMatricesInv().data());
 
     //EBO DAGG
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBODagg);

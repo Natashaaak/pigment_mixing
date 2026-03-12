@@ -17,7 +17,7 @@
 
 class RayMarch {
 public:
-    RayMarch(SPHIntegrationSim *spph, AABBc *a);
+    RayMarch(MPMIntegrationSim *mpm, AABBc *a);
     ~RayMarch();
     AABBc* getA() const;
 
@@ -25,14 +25,14 @@ public:
      * Starts the pipeline, calls all other steps, then performs ray marching and billinear interpolation
      * @param ww framebuffer width
      * @param wh framebuffer height
-     * @param spph simulation
+     * @param mpm simulation
      * @param camera camera object
      */
-    void march(GLint ww, GLint wh, SPHIntegrationSim *spph, Camera* camera);
+    void march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera* camera);
 private:
     void initShader();
     void texQuadInit();
-    void bindSpheres(SPHIntegrationSim *spph);
+    void bindSpheres(MPMIntegrationSim *mpm);
     void createOutputTexture();
 
     /**

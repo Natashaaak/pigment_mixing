@@ -17,12 +17,14 @@
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "sph/SPHIntegrationSim.h"
+#include "mpm/MPMIntegrationSim.h"
 
 GLFWwindow* window;
 
 RayMarch *rm;
 Camera *camera;
-SPHIntegrationSim *spph;
+// SPHIntegrationSim *spph;
+MPMIntegrationSim *mpm;
 AABBc *a;
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
@@ -123,23 +125,39 @@ int createWindow() {
 void sim() {
     if (state.play) {
         ctimer.start(0);
-        spph->simStep();
+        // spph->simStep();
+        mpm->simStep();
         ctimer.end(0);
-        ctimer.start(3);
-        spph->recountParticles();
-        ctimer.end(3);
+        // ctimer.start(3);
+        // spph->recountParticles();
+        // ctimer.end(3);
     }
+}
+
+void clearWindow() {
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
 }
 
 /**
  * Reconstructs surface with according renderer
  */
-void renderSpheres() {
+void renderSpheres(bool firstRender = false) {
+    if(!firstRender && !mpm->isTimeToRender()) return;
+
+    clearWindow();
+    mpm->recountParticles();
+
     int ww, wh;
     glfwGetFramebufferSize(window, &ww, &wh);
-    auto& spheresData = spph->getParticles();
+    // auto& spheresData = spph->getParticles();
+    auto& spheresData = mpm->getParticles();
 
-    rm->march(ww, wh, spph, camera);
+    // rm->march(ww, wh, spph, camera);
+    rm->march(ww, wh, mpm, camera);
 }
 
 /**
@@ -147,8 +165,10 @@ void renderSpheres() {
  * @param name path to the scene file
  */
 void physicsInit(const std::string& name) {
-    spph = new SPHIntegrationSim();
-    spph->loadSimFromJson(name);
+    // spph = new SPHIntegrationSim();
+    // spph->loadSimFromJson(name);
+    mpm = new MPMIntegrationSim();
+    mpm->setupScene();
 }
 
 /**
@@ -221,7 +241,8 @@ void gui() {
         ImGui::Text("Auto ISO:");
         if (ImGui::Checkbox("##AutoISO", &state.autoISO)) {
             if (state.autoISO) {
-                float h = spph->getSupportRadius();
+                // float h = spph->getSupportRadius();
+                float h = mpm->getSupportRadius();
                 state.vdall = 0.8f * h;
                 float q = state.vdall/h;
                 state.iso = state.kern/(h*h*h)*pow(1.0f - q*q, 3);
@@ -358,9 +379,8 @@ void gui() {
 
 
     ImGui::SetNextWindowSize(io.DisplaySize);
-    ImGui::Text("Particles: %3d", spph->getParticleAmount());
-    ImGui::Text("Particles radius: %.3f", spph->getRadius());
-    ImGui::Text("Particles sph radius: %.3f", spph->getSupportRadius());
+    ImGui::Text("Particles: %3d", mpm->getParticleAmount());
+    ImGui::Text("Particles radius: %.3f", mpm->getRadius());
     ImGui::Text("Cells size: %3d", static_cast<int>(rm->getA()->getSize()));
     ImGui::Text("There are %3d possible cells", state.count[1]);
 
@@ -385,18 +405,19 @@ int mainComputeLoop() {
     while(!glfwWindowShouldClose(window)) {
         if (startScene)
             timer.update();
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
-        glDepthMask(GL_TRUE);
         if (!startScene) {
+            clearWindow();
+
             guiStart(startScene, load);
             if (!load.empty()) {
                 state.changeFontSize = true;
                 physicsInit(load);
-                a = new AABBc(spph);
-                rm = new RayMarch(spph, a);
+                // a = new AABBc(spph);
+                // rm = new RayMarch(spph, a);
+                a = new AABBc(mpm);
+                rm = new RayMarch(mpm, a);
+
+                renderSpheres(true);
             }
         }
         else {
@@ -413,7 +434,8 @@ int mainComputeLoop() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     timer.clear();
-    delete spph;
+    // delete spph;
+    delete mpm;
     delete camera;
     delete rm;
     delete a;

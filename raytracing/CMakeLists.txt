@@ -57,6 +57,8 @@ add_executable(GLHydroSurface
         imgui/imgui_impl_opengl3.cpp
         src/sph/SPHIntegrationSim.h
         src/sph/SPHIntegrationSim.cpp
+        src/mpm/MPMIntegrationSim.h
+        src/mpm/MPMIntegrationSim.cpp
         src/raymarch/BinaryDensityGrid.cpp
         src/raymarch/BinaryDensityGrid.h
         src/raymarch/AABBc.cpp
@@ -93,4 +95,4 @@ target_precompile_headers(GLHydroSurface PRIVATE pch.h)
 target_include_directories(GLHydroSurface PRIVATE ${OPENGL_INCLUDE_DIRS} OpenMP::OpenMP_CXX ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_link_libraries(GLHydroSurface PRIVATE glad::glad OpenGL::GL ${GLFW3_LIBRARIES} OpenMP::OpenMP_CXX glm::glm glfw
-        SPlisHSPlasH Utilities SimulatorBase $<$<PLATFORM_ID:Linux>:m> spdlog::spdlog)
+        SPlisHSPlasH Utilities SimulatorBase $<$<PLATFORM_ID:Linux>:m> spdlog::spdlog matter_lib)

@@ -13,7 +13,7 @@
 #include "Camera.h"
 #include "Classification.h"
 #include "Shader.h"
-#include "sph/SPHIntegrationSim.h"
+#include "mpm/MPMIntegrationSim.h"
 
 
 class DepthProcessor {
@@ -23,12 +23,12 @@ public:
 
     /**
      * Generates all the depth maps and calls for other pipeline steps connected to depth.
-     * @param spph simulation
+     * @param mpm simulation
      * @param ww framebuffer width
      * @param wh framebuffer height
      * @param camera camera object
      */
-    void generateDepthMaps(SPHIntegrationSim *spph, GLint ww, GLint wh, Camera *camera);
+    void generateDepthMaps(MPMIntegrationSim *mpm, GLint ww, GLint wh, Camera *camera);
 
     /**
      * Binds depth maps, screen space normals and depth variance to shader
@@ -45,18 +45,18 @@ public:
 private:
     void genBuffers();
     void initShader();
-    void buffers(SPHIntegrationSim *spph);
+    void buffers(MPMIntegrationSim *mpm);
     void genFbo();
     void resizeTextures(GLint ww, GLint wh);
 
     /**
      * Smoothes dall by calling Gaussian Bilateral Filter shader.
-     * @param spph simulation
+     * @param mpm simulation
      * @param ww framebuffer width
      * @param wh framebuffer height
      * @param camera camera object
      */
-    void smoothDall(SPHIntegrationSim *spph, GLint ww, GLint wh, Camera *camera);
+    void smoothDall(MPMIntegrationSim *mpm, GLint ww, GLint wh, Camera *camera);
 
     /**
      * Computes screen spaces normals using DallSmooth

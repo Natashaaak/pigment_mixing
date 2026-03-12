@@ -3,13 +3,13 @@
 #include <glm/common.hpp>
 
 
-AABBc::AABBc(SPHIntegrationSim *spph) {
-    fixedAABB(spph);
+AABBc::AABBc(MPMIntegrationSim *mpm) {
+    fixedAABB(mpm);
 }
 
 
-void AABBc::fixedAABB(SPHIntegrationSim *spph) {
-    voxelS = spph->getSupportRadius();
+void AABBc::fixedAABB(MPMIntegrationSim *mpm) {
+    voxelS = mpm->getSupportRadius();
     glm::vec3 max(1);
     glm::vec3 min(1);
 

@@ -33,7 +33,7 @@ void Simulation::updateDt(){
     }
 
     dt = std::min(dt, frame_dt*(frame+1) - time);
-    dt = std::min(dt, final_time         - time);
+    // dt = std::min(dt, final_time         - time);
     dt = std::max(dt, min_dt);
 
 #ifdef WARNINGS

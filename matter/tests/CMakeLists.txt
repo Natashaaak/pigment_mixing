@@ -17,6 +17,7 @@ if (USE_VDB)
       tests.cpp
       tests_vdb.cpp
       ../src/simulation/simulation.cpp
+			../src/simulation/simulation_units.cpp
       ../src/simulation/save_data.cpp
       ../src/simulation/remesh.cpp
       ../src/simulation/deformation_update.cpp
@@ -56,6 +57,7 @@ else (USE_VDB)
     add_executable(tests
       tests.cpp
       ../src/simulation/simulation.cpp
+      ../src/simulation/simulation_units.cpp
       ../src/simulation/save_data.cpp
       ../src/simulation/remesh.cpp
       ../src/simulation/deformation_update.cpp

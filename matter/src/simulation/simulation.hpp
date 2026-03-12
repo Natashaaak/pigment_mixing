@@ -149,7 +149,14 @@ public:
   TM NeoHookeanPiola(TM & Fe);
   TM HenckyPiola(TM & Fe);
 
-private:
+  // New function for raytracing integration
+  void initializeBasic(std::string name);
+  void setupScene(const float fps);
+  void prepareSimulation();
+  void step();
+  bool frameFinished();
+
+  private:
 
   unsigned int current_time_step = 0;
   unsigned int frame = 0;

@@ -1,23 +1,23 @@
 #include "BinaryDensityGrid.h"
 
-BinaryDensityGrid::BinaryDensityGrid(AABBc *a, SPHIntegrationSim *spph) {
-    createVectors(a, spph);
+BinaryDensityGrid::BinaryDensityGrid(AABBc *a, MPMIntegrationSim *mpm) {
+    createVectors(a, mpm);
     genBuffers();
 }
 
 
-void BinaryDensityGrid::createVectors(AABBc *a, SPHIntegrationSim *spph) {
+void BinaryDensityGrid::createVectors(AABBc *a, MPMIntegrationSim *mpm) {
     cells.resize(a->getSize(), {0, 0});
-    ids.resize(spph->getParticleAmount());
+    ids.resize(mpm->getParticleAmount());
     M.resize(a->getSize(), 0);
     M2.resize((a->cellsX+1)/2 * (a->cellsY+1)/2 * (a->cellsZ+1)/2, 0);
     M4.resize((a->cellsX+4-1)/4 * (a->cellsY+4-1)/4 * (a->cellsZ+4-1)/4, 0);
 }
 
-void BinaryDensityGrid::fillCells(SPHIntegrationSim *spph, AABBc *a) {
-    const auto &spheresData = spph->getParticles();
+void BinaryDensityGrid::fillCells(MPMIntegrationSim *mpm, AABBc *a) {
+    const auto &spheresData = mpm->getParticles();
     std::vector<glm::uvec2>(cells.size(), {0, 0}).swap(cells); //setting to zero
-    for (int i = 0; i < spph->getParticleAmount(); ++i) { //counting particles in each cell
+    for (int i = 0; i < mpm->getParticleAmount(); ++i) { //counting particles in each cell
         glm::vec3 cell = glm::floor((glm::vec3(spheresData[i]) - a->gridStart) / a->voxelS);
 
         if (cell.x < 0 || cell.y < 0 || cell.z < 0 || cell.x >= a->cellsX || cell.y >= a->cellsY || cell.z >= a->cellsZ)
@@ -31,7 +31,7 @@ void BinaryDensityGrid::fillCells(SPHIntegrationSim *spph, AABBc *a) {
         cells[i].y += cells[i-1].x + cells[i-1].y;
     }
     std::vector<unsigned> appeared(cells.size(), 0);
-    for (int i = 0; i < spph->getParticleAmount(); ++i) {
+    for (int i = 0; i < mpm->getParticleAmount(); ++i) {
         glm::vec3 cell = glm::floor((glm::vec3(spheresData[i]) - a->gridStart) / a->voxelS);
         if (cell.x < 0 || cell.y < 0 || cell.z < 0 || cell.x >= a->cellsX || cell.y >= a->cellsY || cell.z >= a->cellsZ)
             continue; //checking boundaries
@@ -91,9 +91,9 @@ void BinaryDensityGrid::generateNc(AABBc *a, std::vector<float> &nc) {
 
 }
 
-void BinaryDensityGrid::fillBDG(AABBc *a, SPHIntegrationSim *spph) {
-    float kern = 315.0f/(64.0f * M_PI * pow(spph->getSupportRadius(), 3));
-    fillCells(spph, a);
+void BinaryDensityGrid::fillBDG(AABBc *a, MPMIntegrationSim *mpm) {
+    float kern = 315.0f/(64.0f * M_PI * pow(mpm->getSupportRadius(), 3));
+    fillCells(mpm, a);
     std::vector<float> nc(cells.size());
     generateNc(a, nc);
     state.count[0] = 0; state.count[1] = 0;
