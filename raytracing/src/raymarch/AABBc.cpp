@@ -13,9 +13,9 @@ void AABBc::fixedAABB(MPMIntegrationSim *mpm) {
     glm::vec3 max(1);
     glm::vec3 min(1);
 
-    // TODO: change based on number of selected colors
-    min = {-1.35, -0.2, -0.85};
-    max = {1.35, 3.1, 0.85};
+    auto boundaries = mpm->getGridBoundaries();
+    min = glm::vec3(boundaries.first);
+    max = glm::vec3(boundaries.second);
 
     extent = max - min;
     gridStart = glm::floor(min / voxelS) * voxelS;

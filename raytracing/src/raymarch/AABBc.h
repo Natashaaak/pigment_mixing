@@ -33,12 +33,12 @@ public:
      * @return
      */
     [[nodiscard]] glm::uint getSize() const;
-private:
     /**
      * Chooses what boundary to use depending on the scene and computes all the parameters
      * @param mpm simulation
      */
     void fixedAABB(MPMIntegrationSim *mpm);
+// private:
 };
 
 

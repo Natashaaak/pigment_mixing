@@ -33,14 +33,14 @@ public:
     BinaryDensityGrid(AABBc *a, MPMIntegrationSim *mpm);
     ~BinaryDensityGrid();
 
-private:
     /**
      * Creates and resize all vectors for the data needed
      * @param a boundary
      * @param mpm simulation
      */
     void createVectors(AABBc *a, MPMIntegrationSim *mpm);
-
+    
+private:
     /**
      * Fills cells with particles ids that are in these cells, and all the supporting vectors
      * @param mpm simulation

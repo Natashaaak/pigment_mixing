@@ -52,7 +52,8 @@ public:
   T min_dt = 1e-14; // minimum dt, also used to check  end of frame, use with caution
   T fps = 1; // frames per second
   T cfl = 0.5; // classical CFL coefficient
-  T cfl_elastic = 0.5; // CFL-like coffefficient for elastic wave speed
+  T cfl_elastic = 1; // CFL-like coffefficient for elastic wave speed
+  // T cfl_elastic = 0.5; // CFL-like coffefficient for elastic wave speed
   T flip_ratio = -0.95; // [0,1]: PIC/FLIP where 1 is FLIP and 0 is PIC. [-1,0): APIC/AFLIP where -1 is AFLIP.
   T rho = 1000; // density
   T gravity_time = 0; // used if gravity_special = true
@@ -76,7 +77,8 @@ public:
   PlasticModel plastic_model = PlasticModel::NoPlasticity;
   HardeningLaw hardening_law = HardeningLaw::ExpoImpl;
   bool use_pradhana = true; // volume correction for Drucker-Prager-based models
-  T E = 1e6; // Young's modulus (3D)
+  // T E = 1e6; // Young's modulus (3D)
+  T E = 1e5; // Young's modulus (3D)
   T nu = 0.3; // Poisson's ratio (3D)
   T stress_tolerance = 1e-5; // only used in some models
   T xi = 0; // softening/hardening parameter
@@ -156,6 +158,10 @@ public:
   void step();
   bool frameFinished();
 
+  // TODO: store and return grid boundaries for raytracing
+  std::pair<std::vector<T>, std::vector<T>> getGridBoundaries() const;
+
+
   private:
 
   unsigned int current_time_step = 0;
@@ -217,12 +223,16 @@ public:
   T Nx_init;
   T low_x_init;
   T high_x_init;
+  T low_x;
+  T high_x;
 
   T min_y_init;
   T max_y_init;
   T Ny_init;
   T low_y_init;
   T high_y_init;
+  T low_y;
+  T high_y;
 
 #ifdef THREEDIM
   T min_z_init;
@@ -230,7 +240,10 @@ public:
   T Nz_init;
   T low_z_init;
   T high_z_init;
+  T low_z;
+  T high_z;
 #endif
+
 }; // end Simulation class
 
 inline TM Simulation::NeoHookeanPiola(TM & Fe){

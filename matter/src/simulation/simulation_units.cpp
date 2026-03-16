@@ -45,11 +45,11 @@ void Simulation::setupScene(const float fps_value){
     gravity[1] = -9.81 * std::cos(theta);
 
     ////// INITIAL PARTICLE POSITIONS
-    Lx = 1;
-    Ly = 1;
+    Lx = 0.3;
+    Ly = 0.3;
     T k_rad = 0.01;
     #ifdef THREEDIM
-        Lz = 5;
+        Lz = 0.3;
     #endif
     sampleParticles(*this, k_rad);
 
@@ -145,12 +145,25 @@ void Simulation::prepareSimulation(){
         }
     }
 
-    debug("Number of particles: ", Np);
-    debug("Grid spacing dx:     ", dx);
-    debug("Elastic wave speed:  ", wave_speed);
-    debug("Maximum dt:          ", dt_max);
-    debug("Particle volume:     ", particle_volume);
-    debug("Particle mass:       ", particle_mass);
+    // debug("Number of particles: ", Np);
+    // debug("Grid spacing dx:     ", dx);
+    // debug("Elastic wave speed:  ", wave_speed);
+    // debug("Maximum dt:          ", dt_max);
+    // debug("Particle volume:     ", particle_volume);
+    // debug("Particle mass:       ", particle_mass);
+
+    // initialiye grid and boundaries solely for the purpose of first frame for raytracing
+    if (pbc){
+        if (current_time_step == 0)
+            remeshFixed(4);
+    }
+    else{
+        if (current_time_step == 0) {
+            remeshFixedInit(2,2,2);
+        } else {
+            remeshFixedCont();
+        }
+    }
 
     time = 0;
     frame = 0;
@@ -175,4 +188,14 @@ bool Simulation::frameFinished(){
         return true;
     }
     return false;
+}
+
+std::pair<std::vector<T>, std::vector<T>> Simulation::getGridBoundaries() const {
+
+#ifdef THREEDIM    
+    return std::make_pair(std::vector<T>{low_x, low_y, low_z}, std::vector<T>{high_x, high_y, high_z});
+#else
+    // two dimensions, but we still return 3D vectors for compatibility with raytracing code. The z values are set to dummy values.
+    return std::make_pair(std::vector<T>{low_x, low_y, low_x}, std::vector<T>{high_x, high_y, high_x});
+#endif
 }

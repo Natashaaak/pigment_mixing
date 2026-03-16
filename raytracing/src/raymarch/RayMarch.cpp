@@ -133,13 +133,15 @@ void RayMarch::renderTex() {
 
 
 void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera) {
-    //TODO: count time for every step to test for bottlenecks
     resizeTexutres(ww, wh);
     // if (state.play) {
     ctimer.start(1);
+    a->fixedAABB(mpm);
+    bdg->createVectors(a, mpm);
     bdg->fillBDG(a, mpm);
     ctimer.end(1);
     depthMaps->generateDepthMaps(mpm, ww, wh, camera);
+
     // timer.start();
     // }
     glClearTexImage(outputTex, 0, GL_RGBA, GL_FLOAT, floorCol);

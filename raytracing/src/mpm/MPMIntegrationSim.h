@@ -49,6 +49,12 @@ public:
      */
     std::vector<glm::vec4>& recountParticles();
 
+    /**
+     * Returns the boundaries of the simulation grid
+     * @return std::pair<glm::vec3, glm::vec3> grid_boundaries
+     */
+    std::pair<glm::vec3, glm::vec3> getGridBoundaries();
+
 private:
     Simulation* sim;
     

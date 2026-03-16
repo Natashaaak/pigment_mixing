@@ -12,7 +12,6 @@ void Simulation::resizeGrid(){
 
 // A fixed grid - must hard-coded for every simulation
 void Simulation::remeshFixed(unsigned int extra_nodes){
-
     grid.x = arange(-dx*(1+extra_nodes), Lx+(2+extra_nodes)*dx, dx);
     grid.y = arange(-dx,                 Ly+(2+extra_nodes)*dx, dx);
     #ifdef THREEDIM
@@ -21,8 +20,14 @@ void Simulation::remeshFixed(unsigned int extra_nodes){
 
     grid.xc = grid.x[0];
     grid.yc = grid.y[0];
+    low_x = grid.x[0];
+    high_x = grid.x[grid.x.size()-1];
+    low_y = grid.y[0];
+    high_y = grid.y[grid.y.size()-1];
     #ifdef THREEDIM
         grid.zc = grid.z[0];
+        low_z = grid.z[0];
+        high_z = grid.z[grid.z.size()-1];
     #endif
 
     Nx = grid.x.size();
@@ -125,9 +130,17 @@ void Simulation::remeshFixedInit(unsigned int sfx, unsigned int sfy, unsigned in
     high_x_init   = max_x + dx * safety_factor_x;
     low_y_init    = min_y - dx * safety_factor_y;
     high_y_init   = max_y + dx * safety_factor_y;
+
+    low_x = low_x_init;
+    high_x = high_x_init;
+    low_y = low_y_init;
+    high_y = high_y_init;
 #ifdef THREEDIM
     low_z_init  = min_z - dx * safety_factor_z;
     high_z_init = max_z + dx * safety_factor_z;
+
+    low_z = low_z_init;
+    high_z = high_z_init;
 #endif
 
     grid.x = arange(low_x_init, high_x_init+dx, dx);
@@ -224,7 +237,7 @@ void Simulation::remeshFixedCont(){
 #endif
 
 
-    T high_x;
+    // high_x;
     if (max_x < max_x_init){
         unsigned int reduction_factor = std::floor( std::max(0.0,(max_x_init-max_x)/dx - 1e-8*dx) );
         high_x = high_x_init - reduction_factor * dx;
@@ -233,7 +246,7 @@ void Simulation::remeshFixedCont(){
         high_x = high_x_init + expansion_factor * dx;
     }
 
-    T low_x;
+    // low_x;
     if (min_x > min_x_init){
         unsigned int reduction_factor = std::floor( std::max(0.0,(min_x-min_x_init)/dx - 1e-8*dx) );
         low_x = low_x_init + reduction_factor * dx;
@@ -242,7 +255,7 @@ void Simulation::remeshFixedCont(){
         low_x = low_x_init - expansion_factor * dx;
     }
 
-    T high_y;
+    // high_y;
     if (max_y < max_y_init){
         unsigned int reduction_factor = std::floor( std::max(0.0,(max_y_init-max_y)/dx - 1e-8*dx) );
         high_y = high_y_init - reduction_factor * dx;
@@ -251,7 +264,7 @@ void Simulation::remeshFixedCont(){
         high_y = high_y_init + expansion_factor * dx;
     }
 
-    T low_y;
+    // low_y;
     if (min_y > min_y_init){
         unsigned int reduction_factor = std::floor( std::max(0.0,(min_y-min_y_init)/dx - 1e-8*dx) );
         low_y = low_y_init + reduction_factor * dx;
@@ -260,7 +273,7 @@ void Simulation::remeshFixedCont(){
         low_y = low_y_init - expansion_factor * dx;
     }
 #ifdef THREEDIM
-    T high_z;
+    // high_z;
     if (max_z < max_z_init){
         unsigned int reduction_factor = std::floor( std::max(0.0,(max_z_init-max_z)/dx - 1e-8*dx) );
         high_z = high_z_init - reduction_factor * dx;
@@ -269,7 +282,7 @@ void Simulation::remeshFixedCont(){
         high_z = high_z_init + expansion_factor * dx;
     }
 
-    T low_z;
+    // low_z;
     if (min_z > min_z_init){
         unsigned int reduction_factor = std::floor( std::max(0.0,(min_z-min_z_init)/dx - 1e-8*dx) );
         low_z = low_z_init + reduction_factor * dx;
@@ -305,6 +318,10 @@ void Simulation::remeshFixedCont(){
         debug("               grid        = (", Nx, ", ", Ny, ", ", Nz, ")"  );
         #else
         debug("               grid        = (", Nx, ", ", Ny, ")"  );
+        debug("               high_x      = ", high_x);
+        debug("               low_x       = ", low_x);
+        debug("               high_y      = ", high_y);
+        debug("               low_y       = ", low_y);
         #endif
     #endif
 
