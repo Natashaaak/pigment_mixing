@@ -1,5 +1,7 @@
 #include "simulation.hpp"
 #include "../sampling/sampling_particles.hpp"
+#include <random>
+#include "../objects/object_vdb.hpp"
 
 
 void Simulation::initializeBasic(std::string name){
@@ -21,7 +23,7 @@ void Simulation::initializeBasic(std::string name){
     is_initialized = true;
 }
 
-void Simulation::setupScene(const float fps_value){
+void Simulation::setupScene(const float fps_value, const std::vector<float>& colorRatios){
     reduce_verbose = false;
     end_frame = 20;     // last frame to simulate
     fps = fps_value;    // frames per second
@@ -45,8 +47,8 @@ void Simulation::setupScene(const float fps_value){
     gravity[1] = -9.81 * std::cos(theta);
 
     ////// INITIAL PARTICLE POSITIONS
-    Lx = 0.3;
-    Ly = 0.3;
+    Lx = 1;
+    Ly = 1;
     T k_rad = 0.01;
     #ifdef THREEDIM
         Lz = 0.3;
@@ -59,6 +61,30 @@ void Simulation::setupScene(const float fps_value){
     }
     grid_reference_point = TV::Zero();
 
+    ////// ASSIGN COLORS BASED ON RATIOS
+    // get random number in [0,1]
+    bool setColorByRatio = false;
+    if(setColorByRatio){
+        std::default_random_engine generator;
+        std::uniform_real_distribution<T> distribution(0.0,1.0);
+        for(int p = 0; p < Np; p++){
+            float rand_num = distribution(generator);
+            uint8_t color_index = colorRatios.size();
+            for (size_t i = 0; i < colorRatios.size(); i++){
+                if (rand_num < colorRatios[i]){
+                    color_index = i;
+                    break;
+                }
+            }
+            particles.color[p] = color_index;
+        }
+    }
+    else {
+        for(int p = 0; p < Np; p++){
+            particles.color[p] = particles.x[p](0) < 0 ? 0 : 1; // left half is color 0, right half is color 1
+        }
+    }
+
     ////// OBJECTS AND TERRAINS
     plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::NoSlip)); 
 
@@ -68,7 +94,12 @@ void Simulation::setupScene(const float fps_value){
     // objects.push_back(std::make_unique<ObjectGate>(BC::SlipFree, friction));
 
     /////// Here is an example how to use ObjectVdb (uncomment includes and openvdb::initialize() above):
-    // objects.push_back(std::make_unique<ObjectVdb>("../levelsets/vdb_file_name.vdb", BC::NoSlip, friction));
+    openvdb::initialize();
+
+    TV box_offset = TV::Zero();
+    box_offset(0) = 0.6;
+    T box_scale = 5; // Example: scale the VDB object by 5x
+    objects.push_back(std::make_unique<ObjectVdb>("../matter/levelsets/box.vdb", BC::NoSlip, 0.3, box_offset, box_scale));
 
     ////// PLASTICITY
     plastic_model = PlasticModel::DPVisc; // Perzyna model with Drucker_Prager yield surface

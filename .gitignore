@@ -4,6 +4,7 @@ bin/
 
 # Simulations output
 **/output/
+**/output_images/
 **/results/
 
 # Dependencies (for Matter)

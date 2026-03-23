@@ -22,6 +22,7 @@ public:
 
       F.resize(Np); std::fill( F.begin(), F.end(), TM::Identity() );
       Bmat.resize(Np); std::fill( Bmat.begin(), Bmat.end(), TM::Zero() );
+      color.resize(Np); std::fill( color.begin(), color.end(), 0 );
   }
 
   std::vector<TV> x;
@@ -39,6 +40,8 @@ public:
   std::vector<TM> F;
   std::vector<TM> Bmat;
 
+  // indices of particle's color
+  std::vector<uint8_t> color;
 };
 
 class Grid{

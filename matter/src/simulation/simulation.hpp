@@ -153,7 +153,7 @@ public:
 
   // New function for raytracing integration
   void initializeBasic(std::string name);
-  void setupScene(const float fps);
+  void setupScene(const float fps, const std::vector<float>& colorRatios);
   void prepareSimulation();
   void step();
   bool frameFinished();

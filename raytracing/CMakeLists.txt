@@ -55,8 +55,6 @@ add_executable(GLHydroSurface
         imgui/imgui_widgets.cpp
         imgui/imgui_impl_glfw.cpp
         imgui/imgui_impl_opengl3.cpp
-        src/sph/SPHIntegrationSim.h
-        src/sph/SPHIntegrationSim.cpp
         src/mpm/MPMIntegrationSim.h
         src/mpm/MPMIntegrationSim.cpp
         src/raymarch/BinaryDensityGrid.cpp

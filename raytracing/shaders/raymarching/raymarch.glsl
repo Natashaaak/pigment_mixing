@@ -116,7 +116,9 @@ float poly6 = 315.0f/(64.0f*pi); //poly6
 float spiky = -45.0f/pi; //first derivative of spiky
 const int MAX_INT = 2147483647;
 const vec3 lightDirView = normalize(vec3(1.0f, -1.0f, -1.0f));
-const vec3 color = vec3(0.557f, 0.645f, 0.969f);
+
+uniform vec3 palette[3];
+
 const vec4 floorCol = vec4(0.375f, 0.35f, 0.325f, 1.0f);
 ivec3 cS4 = ivec3(3);
 ivec3 cS2 = ivec3(1);
@@ -232,8 +234,9 @@ void updateTCurr(inout State state, inout Ray ray){
     }
 }
 ///Computes density at the current point using only 27 cells around it using poly6 kern
-float computeDensity(vec3 pos){
+float computeDensity(vec3 pos, out vec3 outColor){
     float density = 0.0f;
+    outColor = vec3(0.0f);
     ivec3 cell = ivec3(floor((pos - gridStart) / voxelSize));
     for(int x = -1; x < 2; x++){
         for(int y = -1; y < 2; y++){
@@ -269,10 +272,16 @@ float computeDensity(vec3 pos){
                     }
                     w *= poly6 * hr2 * hr2 * hr2;
                     density += w;
+
+                    // Mix colors based on density weight
+                    uint c_idx = clamp(uint(sphere.w), 0u, 2u);
+                    outColor += palette[c_idx] * w;
                 }
             }
         }
     }
+    if(density > 0.0f)
+        outColor /= density; // Normalize color by total density
     return density;
 }
 ///Computes object normal using spiky kern
@@ -390,12 +399,13 @@ void main(){
         if(getPossibility(state) == 1000u){
             break;
         }
-        float density = computeDensity(pos);
+        vec3 surfaceColor;
+        float density = computeDensity(pos, surfaceColor);
         if(density > iso){
             foundSurface = true;
             vec3 N = computeNormal(ray.start, pos, origPix, depth);
             float diff = max(dot(N, lightDirView), 0.0);
-            imageStore(outTex, origPix, vec4(color*diff, 1.0f));
+            imageStore(outTex, origPix, vec4(surfaceColor * diff, 1.0f));
             imageStore(normalDepthTex, origPix, vec4(N, pos.z));
             break;
         }

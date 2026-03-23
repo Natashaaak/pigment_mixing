@@ -3,6 +3,9 @@
 
 #include "../../../matter/src/simulation/simulation.hpp"
 
+class BinaryDensityGrid;
+class AABBc;
+
 class MPMIntegrationSim {
 public:
     MPMIntegrationSim();
@@ -43,6 +46,8 @@ public:
      */
     const std::vector<glm::vec4>& getParticles();
 
+    const std::vector<glm::vec3> &getColors();
+
     /**
      * Recounts current positions of all particles after each simulation step
      * @return std::vector<glm::vec4>& parts
@@ -55,10 +60,18 @@ public:
      */
     std::pair<glm::vec3, glm::vec3> getGridBoundaries();
 
+    void setGridData(BinaryDensityGrid* bdg, AABBc* a);
+
 private:
     Simulation* sim;
     
     std::vector<glm::vec4> particles;
+    std::vector<glm::vec3> colors;
+    // colors ratio (cdf), first one is ommited bcs always = 0
+    std::vector<float> ratios;
+
+    BinaryDensityGrid* bdg = nullptr;
+    AABBc* aabb = nullptr;
 };
 
 #endif //MPMINTEGRATIONSIM_H

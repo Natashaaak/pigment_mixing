@@ -4,10 +4,13 @@ project(matter)
 
 enable_testing()
 
+option (USE_VDB "Use OpenVDB part of the code" ON)
+if(USE_VDB)
+    link_libraries(openvdb tbb)
+endif()
+
 add_subdirectory(src)
 add_subdirectory(tests)
-
-option (USE_VDB "Use OpenVDB part of the code" OFF)
 
 #### Download header files from external Github repos ####
 

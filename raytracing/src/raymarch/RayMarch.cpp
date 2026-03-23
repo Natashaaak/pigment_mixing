@@ -139,6 +139,7 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     a->fixedAABB(mpm);
     bdg->createVectors(a, mpm);
     bdg->fillBDG(a, mpm);
+    mpm->setGridData(bdg, a);
     ctimer.end(1);
     depthMaps->generateDepthMaps(mpm, ww, wh, camera);
 
@@ -168,7 +169,6 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("h", mpm->getSupportRadius());
     // shader->setUniform("DforRIJ", state.vdall);
     shader->setUniform("DforRIJ", mpm->getRadius());
-    // shader->setUniform("DforRIJ", state.seeSpheres ? spph->getRadius() : spph->getSupportRadius());
     shader->setUniform("rad", mpm->getRadius());
     shader->setUniform("cellsSize", glm::ivec3(a->cellsX, a->cellsY, a->cellsZ));
     shader->setUniform("iso", state.iso);
@@ -178,6 +178,7 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("debugMode", state.debugMode);
     shader->setUniform("maxLevel", state.aa[state.currRes]);
     shader->setUniform("isAni", state.isAni);
+    shader->setUniform("palette", mpm->getColors());
 
 
     GLuint groupCountX = (ww + state.groupSizeRayMarching.x - 1) / state.groupSizeRayMarching.x;
@@ -213,5 +214,3 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     // timer.end();
     // glEndQuery(GL_TIME_ELAPSED);
 }
-
-

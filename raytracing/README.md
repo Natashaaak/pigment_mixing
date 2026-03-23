@@ -3,8 +3,6 @@
 Scenes are adjustable, you can control the amount of particles in the scene by changing "particleRadius" in configuration.
 Scenes are in data/Scenes.
 
-Scenes are from SPlisHSPlasH library.
-
 # Controls
 
 You can control the simulation.
@@ -28,10 +26,9 @@ The project uses the following libraries:
 * **glad**
 * **glm**
 * **ImGui**
-* **Eigen3** (vendored inside SPlisHSPlasH)
+* **Eigen3**
 * **spdlog** built from `external/spdlog`
-* **SPlisHSPlasH** built from `external/SPlisHSPlasH`
-* **GLFW** (vendored inside SPlisHSPlasH)
+* **GLFW**
 
 ---
 

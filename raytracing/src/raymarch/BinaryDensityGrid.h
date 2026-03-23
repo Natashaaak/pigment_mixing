@@ -40,6 +40,9 @@ public:
      */
     void createVectors(AABBc *a, MPMIntegrationSim *mpm);
     
+    const std::vector<glm::uvec2>& getCells() const { return cells; }
+    const std::vector<unsigned>& getIds() const { return ids; }
+    
 private:
     /**
      * Fills cells with particles ids that are in these cells, and all the supporting vectors

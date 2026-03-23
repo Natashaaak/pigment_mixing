@@ -16,20 +16,67 @@
 #include "raymarch/RayMarch.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
-#include "sph/SPHIntegrationSim.h"
 #include "mpm/MPMIntegrationSim.h"
+#include <string>
+#include <algorithm>
+#include <vector>
+#include <fstream>
+#include <filesystem>
+#include <sstream>
+#include <chrono>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 GLFWwindow* window;
 
 RayMarch *rm;
 Camera *camera;
-// SPHIntegrationSim *spph;
 MPMIntegrationSim *mpm;
 AABBc *a;
+char outputDir[256] = "output_images";
+bool takeScreenshot = false;
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
     camera->setAspect(width, height);
+}
+
+void saveImage(const std::string& directory, GLFWwindow* win) {
+    int width, height;
+    glfwGetFramebufferSize(win, &width, &height);
+
+    std::vector<unsigned char> pixels(width * height * 3);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+
+    // OpenGL reads from bottom-to-top, flip vertically
+    std::vector<unsigned char> flippedPixels(width * height * 3);
+    for (int y = 0; y < height; ++y) {
+        std::copy(pixels.begin() + y * width * 3, 
+                  pixels.begin() + (y + 1) * width * 3, 
+                  flippedPixels.begin() + (height - 1 - y) * width * 3);
+    }
+
+    // Generate unique filename using timestamp
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << "render_" << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S") << ".png";
+    std::string filename = ss.str();
+
+    try {
+        if (!directory.empty()) {
+            std::filesystem::create_directories(directory);
+        }
+        std::string filepath = directory.empty() ? filename : directory + "/" + filename;
+        if (stbi_write_png(filepath.c_str(), width, height, 3, flippedPixels.data(), width * 3)) {
+            debug("Saved image to ", filepath);
+        } else {
+            debug("Failed to open file for image saving: ", filepath);
+        }
+    } catch (const std::exception& e) {
+        debug("Error while saving image: ", e.what());
+    }
 }
 
 void processInput(GLFWwindow *window, int key, int scancode, int action, int mods) {
@@ -42,6 +89,10 @@ void processInput(GLFWwindow *window, int key, int scancode, int action, int mod
     }
     if (key == GLFW_KEY_W && action == GLFW_PRESS) {
         camera->setPos(camera->cameraPos + (camera->camForward * 0.5f));
+    }
+    if (key == GLFW_KEY_P && action == GLFW_PRESS) {
+        takeScreenshot = !takeScreenshot;
+        debug("Take screenshot: ", takeScreenshot);
     }
 }
 
@@ -125,11 +176,9 @@ int createWindow() {
 void sim() {
     if (state.play) {
         ctimer.start(0);
-        // spph->simStep();
         mpm->simStep();
         ctimer.end(0);
         // ctimer.start(3);
-        // spph->recountParticles();
         // ctimer.end(3);
     }
 }
@@ -146,27 +195,27 @@ void clearWindow() {
  * Reconstructs surface with according renderer
  */
 void renderSpheres(bool firstRender = false) {
-    if(!firstRender && !mpm->isTimeToRender()) return;
+    if(!firstRender && !mpm->isTimeToRender() && state.play) return;
 
     clearWindow();
     mpm->recountParticles();
 
     int ww, wh;
     glfwGetFramebufferSize(window, &ww, &wh);
-    // auto& spheresData = spph->getParticles();
     auto& spheresData = mpm->getParticles();
 
-    // rm->march(ww, wh, spph, camera);
     rm->march(ww, wh, mpm, camera);
+
+    if (takeScreenshot && state.play) {
+        saveImage(outputDir, window);
+    }
 }
 
 /**
- * Initializes SPH simulation and loads current scene from json file
+ * Initializes MPM simulation and loads current scene from json file
  * @param name path to the scene file
  */
 void physicsInit(const std::string& name) {
-    // spph = new SPHIntegrationSim();
-    // spph->loadSimFromJson(name);
     mpm = new MPMIntegrationSim();
     mpm->setupScene();
 }
@@ -241,7 +290,6 @@ void gui() {
         ImGui::Text("Auto ISO:");
         if (ImGui::Checkbox("##AutoISO", &state.autoISO)) {
             if (state.autoISO) {
-                // float h = spph->getSupportRadius();
                 float h = mpm->getSupportRadius();
                 state.vdall = 0.8f * h;
                 float q = state.vdall/h;
@@ -386,6 +434,12 @@ void gui() {
 
     ImGui::Text("FPS: %.1f (%.3f ms/frame)", io.Framerate, 1000.0f/io.Framerate);
 
+    ImGui::Separator();
+    ImGui::InputText("Output Dir", outputDir, IM_ARRAYSIZE(outputDir));
+    if (ImGui::Button("Save Rendered Image")) {
+        takeScreenshot = true;
+    }
+
     ImGui::EndChild();
 
     ImGui::End();
@@ -412,8 +466,6 @@ int mainComputeLoop() {
             if (!load.empty()) {
                 state.changeFontSize = true;
                 physicsInit(load);
-                // a = new AABBc(spph);
-                // rm = new RayMarch(spph, a);
                 a = new AABBc(mpm);
                 rm = new RayMarch(mpm, a);
 
@@ -434,7 +486,6 @@ int mainComputeLoop() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     timer.clear();
-    // delete spph;
     delete mpm;
     delete camera;
     delete rm;
