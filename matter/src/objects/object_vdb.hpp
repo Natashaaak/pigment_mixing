@@ -23,10 +23,13 @@ public:
 
     typename GridT::Ptr grid;
     typename GradientGridT::Ptr grad_phi;
+    TV offset;
+    T scale;
 
     ~ObjectVdb(){}
 
-    ObjectVdb(std::string filename, BC bc_in = BC::NoSlip, T friction_in = 0.0, std::string name_in = "") : ObjectGeneral(bc_in, friction_in, name_in) {
+    ObjectVdb(std::string filename, BC bc_in = BC::NoSlip, T friction_in = 0.0, TV offset_in = TV::Zero(), T scale_in = 1.0, std::string name_in = "") 
+        : ObjectGeneral(bc_in, friction_in, name_in), offset(offset_in), scale(scale_in) {
 
         openvdb::io::File file(filename);
         file.open();
@@ -47,7 +50,7 @@ public:
         Eigen::Matrix<T, 3, 1> X;
         X.setZero();
         for (int d = 0; d < dim; d++)
-            X(d) = X_in(d);
+            X(d) = (X_in(d) - offset(d)) / scale;
 
         openvdb::tools::GridSampler<TreeT, openvdb::tools::BoxSampler> interpolator(grid->constTree(), grid->transform());
         openvdb::math::Vec3<T> P(X(0), X(1), X(2));
@@ -61,7 +64,7 @@ public:
         Eigen::Matrix<T, 3, 1> X;
         X.setZero();
         for (int d = 0; d < dim; d++)
-            X(d) = X_in(d);
+            X(d) = (X_in(d) - offset(d)) / scale;
 
         openvdb::tools::GridSampler<GradientTreeT, openvdb::tools::BoxSampler> interpolator(grad_phi->constTree(), grad_phi->transform());
         openvdb::math::Vec3<T> P(X(0), X(1), X(2));
@@ -85,8 +88,8 @@ public:
         auto wmax = grid->indexToWorld(bbox.max());
 
         for (int d = 0; d < dim; d++) {
-            min_bbox(d) = (T)wmin(d);
-            max_bbox(d) = (T)wmax(d);
+            min_bbox(d) = (T)wmin(d) * scale + offset(d);
+            max_bbox(d) = (T)wmax(d) * scale + offset(d);
         }
     }
 

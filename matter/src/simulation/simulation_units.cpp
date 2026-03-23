@@ -94,12 +94,12 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     // objects.push_back(std::make_unique<ObjectGate>(BC::SlipFree, friction));
 
     /////// Here is an example how to use ObjectVdb (uncomment includes and openvdb::initialize() above):
-    openvdb::initialize();
+    // openvdb::initialize();
 
-    TV box_offset = TV::Zero();
-    box_offset(0) = 0.6;
-    T box_scale = 5; // Example: scale the VDB object by 5x
-    objects.push_back(std::make_unique<ObjectVdb>("../matter/levelsets/box.vdb", BC::NoSlip, 0.3, box_offset, box_scale));
+    // TV box_offset = TV::Zero();
+    // box_offset(0) = 0.6;
+    // T box_scale = 5; // Example: scale the VDB object by 5x
+    // objects.push_back(std::make_unique<ObjectVdb>("../matter/levelsets/box.vdb", BC::NoSlip, 0.3, box_offset, box_scale));
 
     ////// PLASTICITY
     plastic_model = PlasticModel::DPVisc; // Perzyna model with Drucker_Prager yield surface
