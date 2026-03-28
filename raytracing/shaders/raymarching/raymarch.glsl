@@ -31,6 +31,8 @@ layout(binding = 4) uniform sampler2D Nscreen;
 
 layout(binding = 5) uniform usampler2D VarianceTex;
 
+layout(binding = 6) uniform sampler3D spatulaTex;
+
 layout(std430, binding = 0) buffer spheres {
     vec4 spheresData[];
 };
@@ -110,6 +112,10 @@ uniform uint maxLevel;
 ///If should render with anisotropic kernel
 uniform bool isAni;
 
+uniform mat4 invSpatulaTransform;
+uniform vec3 spatulaDim;
+uniform bool has_vdb;
+
 const float pi = 3.141592f;
 const int lcs = 16; //equal to local size
 float poly6 = 315.0f/(64.0f*pi); //poly6
@@ -118,11 +124,77 @@ const int MAX_INT = 2147483647;
 const vec3 lightDirView = normalize(vec3(1.0f, -1.0f, -1.0f));
 
 uniform vec3 palette[3];
-
+const vec3 vdb_color = vec3(1.0f, 0.0f, 0.0f);
 const vec4 floorCol = vec4(0.375f, 0.35f, 0.325f, 1.0f);
 ivec3 cS4 = ivec3(3);
 ivec3 cS2 = ivec3(1);
 uint variance = 0;
+
+bool rayMarchVDB(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
+    // 1. Převod paprsku do lokálního prostoru
+    vec3 origin = (invSpatulaTransform * vec4(ray.start, 1.0)).xyz;
+    vec3 direction = (invSpatulaTransform * vec4(ray.dir, 0.0)).xyz;
+
+    // 2. SLAB TEST (Průsečík s boxem 0 až spatulaDim)
+    // epsilon ošetří dělení nulou u os rovnoběžných s paprskem
+    vec3 invDir = 1.0 / (direction + sign(direction) * 1e-9); 
+    vec3 t0 = (vec3(0.0) - origin) * invDir;
+    vec3 t1 = (spatulaDim - origin) * invDir;
+    
+    vec3 tMin = min(t0, t1);
+    vec3 tMax = max(t0, t1);
+    
+    float t_near = max(tMin.x, max(tMin.y, tMin.z));
+    float t_far = min(tMax.x, min(tMax.y, tMax.z));
+
+    // Pokud paprsek mine box nebo je box celý za námi
+    if (t_near > t_far || t_far < 0.0) return false;
+
+    // 3. START MARCHINGU
+    // Začneme buď na t_near, nebo na 0.0 (pokud jsme už uvnitř boxu)
+    float t = max(0.0, t_near); 
+    float step = 0.05; 
+
+    // Omezíme počet kroků, protože díky slab testu už neplýtváme energií v prázdnotě
+    for(int i = 0; i < 160; i++) {
+        vec3 p_local = origin + t * direction;
+        vec3 uvw = p_local / spatulaDim;
+
+        // Vzorkování SDF
+        float dist = texture(spatulaTex, uvw).r;
+
+        // Detekce povrchu
+        if(dist < 0.01) {
+            t_hit = t;
+            hit_pos = ray.start + ray.dir * t_hit;
+            return true;
+        }
+
+        // Skok o vzdálenost SDF (dist musí být ve stejných jednotkách jako t)
+        t += max(dist, step);
+
+        // Pokud jsme vyletěli z boxu nebo překročili max hloubku, končíme
+        if(t > t_far || t > max_t) break;
+    }
+    return false;
+}
+
+/// Computes the normal of the spatula surface from the 3D texture
+vec3 getVDBNormal(vec3 pos_ws) {
+    vec3 eps = vec3(1.0) / spatulaDim;
+    vec3 uvw = (invSpatulaTransform * vec4(pos_ws, 1.0)).xyz / spatulaDim;
+
+    float nx = texture(spatulaTex, uvw + vec3(eps.x, 0, 0)).r - texture(spatulaTex, uvw - vec3(eps.x, 0, 0)).r;
+    float ny = texture(spatulaTex, uvw + vec3(0, eps.y, 0)).r - texture(spatulaTex, uvw - vec3(0, eps.y, 0)).r;
+    float nz = texture(spatulaTex, uvw + vec3(0, 0, eps.z)).r - texture(spatulaTex, uvw - vec3(0, 0, eps.z)).r;
+
+    vec3 normal_local = -normalize(vec3(nx, ny, nz));
+
+    vec3 normal_ws = normalize(normal_local * mat3(invSpatulaTransform));
+    
+    return normalize(mat3(view) * normal_ws);
+}
+
 ///Computes position and direction in the world of the ray
 void getRay(ivec2 pix, float depth, inout Ray ray){
     vec2 res = vec2(width, height);
@@ -373,45 +445,111 @@ void main(){
         return;
     }
     float depth = texelFetch(Dall, origPix, 0).r;
-    if(depth <= 0.0f){ //means this is zero and there is no sphere
-        imageStore(normalDepthTex, origPix, vec4(1000.0f));
-        return;
-    }
     if(!isAni)
         poly6 /= pow(h, 9.0f);
     spiky /= pow(h, 6.0f);
-    Ray ray;
-    getRay(origPix, depth, ray);
-    State state;
-    stateInit(state, ray);
-    for(uint i = 0; i < maxStepCount; i++){
-        if(i > maxSkipCount && !hasSkipped){
-            float depthDagg = texelFetch(Dagg, origPix, 0).r;
-            //            if(depthDagg == depth) // means we started and aggregation and did not found surface
-            //            break;
-            depth = depthDagg;
-            hasSkipped = true;
-            getRay(origPix, depthDagg, ray);
-            stateInit(state, ray); //Skipping to Dagg depth and starting from there
+    Ray ray_vdb;
+    getRay(origPix, 0.0f, ray_vdb);
+    
+    float t_vdb = 1e6; 
+    bool hit_vdb = false;
+
+    if (has_vdb) {
+        float t_temp;
+        vec3 p_temp;
+        // Sphere tracing for spatula
+        if (rayMarchVDB(ray_vdb, t_temp, p_temp, 1000.0)) {
+            t_vdb = t_temp;
+            hit_vdb = true;
         }
-        updateTCurr(state, ray);
-        vec3 pos = ray.start + ray.dir * state.tcurr;
-        if(getPossibility(state) == 1000u){
-            break;
+    }
+
+    Ray ray_mpm;
+    if (depth > 0.0f) {
+        getRay(origPix, depth, ray_mpm);
+        State state;
+        stateInit(state, ray_mpm);
+        for(uint i = 0; i < maxStepCount; i++){
+            if(i > maxSkipCount && !hasSkipped){
+                float depthDagg = texelFetch(Dagg, origPix, 0).r;
+                depth = depthDagg;
+                hasSkipped = true;
+                getRay(origPix, depthDagg, ray_mpm);
+                stateInit(state, ray_mpm); //Skipping to Dagg depth and starting from there
+            }
+            updateTCurr(state, ray_mpm);
+
+            if (hit_vdb && (state.tcurr + depth) > t_vdb) break;  // if we already hit the VDB surface and ray for mpm is farther than that, we can stop
+
+            vec3 pos = ray_mpm.start + ray_mpm.dir * state.tcurr;
+            if(getPossibility(state) == 1000u){
+                break;
+            }
+
+            vec3 surfaceColor;
+            float density = computeDensity(pos, surfaceColor);
+
+            if(density > iso){  // mpm is closer than vbd surface
+                foundSurface = true;
+                vec3 N = computeNormal(ray_mpm.start, pos, origPix, depth);
+                float diff = max(dot(N, lightDirView), 0.0);
+                imageStore(outTex, origPix, vec4(surfaceColor * diff, 1.0f));
+                imageStore(normalDepthTex, origPix, vec4(N, pos.z));
+                return;
+            }
         }
-        vec3 surfaceColor;
-        float density = computeDensity(pos, surfaceColor);
-        if(density > iso){
-            foundSurface = true;
-            vec3 N = computeNormal(ray.start, pos, origPix, depth);
+    }
+
+    float t_floor = 1e6;
+    bool hit_floor = false;
+
+    if (ray_vdb.dir.y < 0.0) {
+        float temp_t = (gridStart.y - ray_vdb.start.y) / ray_vdb.dir.y;
+        if (temp_t > 0.0) {
+            t_floor = temp_t;
+            hit_floor = true;
+        }
+    }
+
+    if(hit_vdb){
+        if (hit_floor && t_floor < t_vdb) {
+            hit_vdb = false; // "Zrušíme" zásah špachtle, protože je pod zemí
+        } else {
+            vec3 pos_vdb = ray_vdb.start + ray_vdb.dir * t_vdb;
+            vec3 N = getVDBNormal(pos_vdb);
+
             float diff = max(dot(N, lightDirView), 0.0);
-            imageStore(outTex, origPix, vec4(surfaceColor * diff, 1.0f));
-            imageStore(normalDepthTex, origPix, vec4(N, pos.z));
-            break;
+            vec3 final_vdb_color = vdb_color * (diff * 0.8 + 0.2);
+
+            imageStore(outTex, origPix, vec4(final_vdb_color, 1.0f));
+            // imageStore(outTex, origPix, vec4(vec3(t_vdb * 0.1), 1.0f));
+            float viewZ = (view * vec4(pos_vdb, 1.0)).z;
+            imageStore(normalDepthTex, origPix, vec4(N, viewZ));
+            foundSurface = true;
         }
+    }
+    if(!foundSurface && hit_floor){
+        // Floor plane intersection
+        float t_floor = (gridStart.y - ray_vdb.start.y) / ray_vdb.dir.y;
+        vec3 hit_pos = ray_vdb.start + t_floor * ray_vdb.dir;
+        vec3 N_floor = vec3(0.0, 1.0, 0.0);
+        vec3 N_floor_view = normalize(mat3(view) * N_floor);
+        
+        // Checkerboard pattern
+        vec2 checker = floor(hit_pos.xz * 2.0);
+        float c = mod(checker.x + checker.y, 2.0);
+        vec3 floor_color = floorCol.rgb * (0.8 + c * 0.2);
+
+        // Use absolute dot product and add ambient light so it doesn't render completely black
+        float diff = abs(dot(N_floor_view, lightDirView)) * 0.7 + 0.3;
+        
+        imageStore(outTex, origPix, vec4(floor_color * diff, 1.0));
+        imageStore(normalDepthTex, origPix, vec4(N_floor_view, hit_pos.z));
+        foundSurface = true;
     }
     if(!foundSurface){
         imageStore(normalDepthTex, origPix, vec4(1000.0f));
+        imageStore(outTex, origPix, vec4(0.1, 0.1, 0.1, 1.0)); // Dark gray background
         return;
     }
     return;

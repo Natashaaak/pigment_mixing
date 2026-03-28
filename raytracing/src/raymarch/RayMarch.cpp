@@ -2,7 +2,6 @@
 
 #include "PassTimer.h"
 
-
 RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     glGenBuffers(1, &spheresSSBO);
     depthMaps = new DepthProcessor();
@@ -11,6 +10,19 @@ RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     initShader();
     texQuadInit();
     createOutputTexture();
+
+    // Setup Spatula 3D Texture
+    glGenTextures(1, &spatulaTex);
+    glBindTexture(GL_TEXTURE_3D, spatulaTex);
+    std::vector<float> spatBuf = mpm->getSpatulaBuffer();
+    glm::vec3 spatDim = mpm->getSpatulaDimensions();
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_R32F, (GLsizei)spatDim.x, (GLsizei)spatDim.y, (GLsizei)spatDim.z, 0, GL_RED, GL_FLOAT, spatBuf.data());
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_3D, 0);
 }
 
 RayMarch::~RayMarch() {
@@ -24,6 +36,7 @@ RayMarch::~RayMarch() {
     glDeleteTextures(1, &normalDepthTex);
     glDeleteBuffers(1, &quadVBO);
     glDeleteVertexArrays(1, &quadVAO);
+    glDeleteTextures(1, &spatulaTex);
 }
 
 void RayMarch::initShader() {
@@ -180,6 +193,13 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("isAni", state.isAni);
     shader->setUniform("palette", mpm->getColors());
 
+    // Bind spatula texture and uniforms
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_3D, spatulaTex);
+    shader->setUniform("spatulaTex", 6);
+    shader->setUniform("invSpatulaTransform", glm::inverse(mpm->getSpatulaTransform()));
+    shader->setUniform("spatulaDim", mpm->getSpatulaDimensions());
+    shader->setUniform("has_vdb", mpm->getSpatulaDimensions().x > 0.0f);
 
     GLuint groupCountX = (ww + state.groupSizeRayMarching.x - 1) / state.groupSizeRayMarching.x;
     GLuint groupCountY = (wh + state.groupSizeRayMarching.y - 1) / state.groupSizeRayMarching.y;

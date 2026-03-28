@@ -18,6 +18,7 @@
 #include "../timer.hpp"
 
 #include "../objects/object_general.hpp"
+#include "../objects/object_vdb.hpp"
 #include "../objects/object_plate.hpp"
 
 class Simulation{
@@ -113,6 +114,7 @@ public:
   // Objects
   std::vector<std::unique_ptr<ObjectPlate>> plates;
   std::vector<std::unique_ptr<ObjectGeneral>> objects;
+  ObjectVdb* spatula_vdb_ptr = nullptr;
 
   // Functions
   void initialize(bool save = true, std::string dir = "output/", std::string name = "dummy");
@@ -158,9 +160,8 @@ public:
   void step();
   bool frameFinished();
 
-  // TODO: store and return grid boundaries for raytracing
   std::pair<std::vector<T>, std::vector<T>> getGridBoundaries() const;
-
+  ObjectVdb* getVdbObject() const { return spatula_vdb_ptr; };
 
   private:
 

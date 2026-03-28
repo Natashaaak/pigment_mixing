@@ -5,7 +5,7 @@ import pyopenvdb as vdb
 import trimesh # Možná budeš muset doinstalovat: pip install trimesh
 import numpy as np
 
-def convert_obj_to_vdb(input_file, output_file, voxel_size=0.05):
+def convert_obj_to_vdb(input_file, output_file, voxel_size=0.03):
     # Load mesh using trimesh (handles OBJ well)
     mesh = trimesh.load(input_file)
     

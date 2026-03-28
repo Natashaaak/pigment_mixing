@@ -62,6 +62,12 @@ public:
 
     void setGridData(BinaryDensityGrid* bdg, AABBc* a);
 
+    std::vector<float> getSpatulaBuffer() const;
+
+    glm::vec3 getSpatulaDimensions() const;
+
+    glm::mat4 getSpatulaTransform() const;
+
 private:
     Simulation* sim;
     
