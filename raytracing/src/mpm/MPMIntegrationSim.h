@@ -68,6 +68,8 @@ public:
 
     glm::mat4 getSpatulaTransform() const;
 
+    void moveSpatulaY(T deltaY);
+
 private:
     Simulation* sim;
     

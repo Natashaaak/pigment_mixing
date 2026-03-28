@@ -97,7 +97,7 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     openvdb::initialize();
 
     TV box_offset = TV::Zero();
-    box_offset(0) = 0.6;
+    box_offset(1) = 1.5f;
     T box_scale = 1; // Example: scale the VDB object by 5x
     objects.push_back(std::make_unique<ObjectVdb>("../matter/levelsets/box.vdb", BC::NoSlip, 0.3, box_offset, box_scale));
     spatula_vdb_ptr = dynamic_cast<ObjectVdb*>(objects.back().get()); // store a pointer to the spatula VDB object for later use in the simulation loop

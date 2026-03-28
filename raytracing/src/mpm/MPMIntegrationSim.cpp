@@ -124,6 +124,15 @@ glm::mat4 MPMIntegrationSim::getSpatulaTransform() const
     return transform;
 }
 
+void MPMIntegrationSim::moveSpatulaY(T deltaY)
+{
+    if (!sim->getVdbObject())
+        return;
+
+    auto vdbObj = sim->getVdbObject();
+    vdbObj->offset.y() += deltaY;
+}
+
 void MPMIntegrationSim::neighborsByIndex(unsigned i, std::vector<unsigned int> &out) {
     out.clear();
     float searchRadius = getSupportRadius();

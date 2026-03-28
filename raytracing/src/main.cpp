@@ -94,6 +94,12 @@ void processInput(GLFWwindow *window, int key, int scancode, int action, int mod
         takeScreenshot = !takeScreenshot;
         debug("Take screenshot: ", takeScreenshot);
     }
+    if(key == GLFW_KEY_DOWN && action == GLFW_PRESS){
+        mpm->moveSpatulaY(-0.01f);
+    }
+    if(key == GLFW_KEY_UP && action == GLFW_PRESS){
+        mpm->moveSpatulaY(0.01f);
+    }
 }
 
 void mouseButtonCallback(GLFWwindow* w, int button, int action, int mods) {
