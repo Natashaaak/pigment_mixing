@@ -131,12 +131,11 @@ ivec3 cS2 = ivec3(1);
 uint variance = 0;
 
 bool rayMarchVDB(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
-    // 1. Převod paprsku do lokálního prostoru
+    // Convert ray to local space of the spatula
     vec3 origin = (invSpatulaTransform * vec4(ray.start, 1.0)).xyz;
     vec3 direction = (invSpatulaTransform * vec4(ray.dir, 0.0)).xyz;
 
-    // 2. SLAB TEST (Průsečík s boxem 0 až spatulaDim)
-    // epsilon ošetří dělení nulou u os rovnoběžných s paprskem
+    // Slab test
     vec3 invDir = 1.0 / (direction + sign(direction) * 1e-9); 
     vec3 t0 = (vec3(0.0) - origin) * invDir;
     vec3 t1 = (spatulaDim - origin) * invDir;
@@ -147,33 +146,32 @@ bool rayMarchVDB(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
     float t_near = max(tMin.x, max(tMin.y, tMin.z));
     float t_far = min(tMax.x, min(tMax.y, tMax.z));
 
-    // Pokud paprsek mine box nebo je box celý za námi
+    // if the ray misses the box or the box is entirely behind us
     if (t_near > t_far || t_far < 0.0) return false;
 
-    // 3. START MARCHINGU
-    // Začneme buď na t_near, nebo na 0.0 (pokud jsme už uvnitř boxu)
+    // Start marching
+    // start at t_near if it's positive, otherwise start at 0 (we are inside the box)
     float t = max(0.0, t_near); 
     float step = 0.05; 
 
-    // Omezíme počet kroků, protože díky slab testu už neplýtváme energií v prázdnotě
+    // Limit the number of steps since the slab test already ensures we won't waste time in empty space
     for(int i = 0; i < 160; i++) {
         vec3 p_local = origin + t * direction;
         vec3 uvw = p_local / spatulaDim;
 
-        // Vzorkování SDF
         float dist = texture(spatulaTex, uvw).r;
 
-        // Detekce povrchu
+        // Surface detection
         if(dist < 0.01) {
             t_hit = t;
             hit_pos = ray.start + ray.dir * t_hit;
             return true;
         }
 
-        // Skok o vzdálenost SDF (dist musí být ve stejných jednotkách jako t)
+        // Jump by the distance returned by the SDF
         t += max(dist, step);
 
-        // Pokud jsme vyletěli z boxu nebo překročili max hloubku, končíme
+        // If we have left the box or exceeded the maximum depth, we are done
         if(t > t_far || t > max_t) break;
     }
     return false;

@@ -156,6 +156,7 @@ public:
   // New function for raytracing integration
   void initializeBasic(std::string name);
   void setupScene(const float fps, const std::vector<float>& colorRatios);
+  void sampleMultipleVdbObjects(std::vector<std::string> vdb_filenames, std::vector<uint8_t> colors, T kRadius, T ppc);
   void prepareSimulation();
   void step();
   bool frameFinished();

@@ -40,7 +40,7 @@ float MPMIntegrationSim::getRadius() {
 }
 
 float MPMIntegrationSim::getSupportRadius() {
-    return sim->dx * 1.5f;  // with using SPLINEDEG 2 kernel, the support radius is 1.5 times the grid cell size
+    return sim->dx * 2.0f;  // with using SPLINEDEG 2 kernel, the support radius is 1.5 times the grid cell size
 }
 
 std::vector<glm::vec4> &MPMIntegrationSim::recountParticles() {
