@@ -61,6 +61,7 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
 
     ObjectVdb blob_left("../matter/levelsets/Blob_left.vdb");
     ObjectVdb blob_rigt("../matter/levelsets/Blob_right.vdb");
+    blob_left.scale = 0.5; blob_rigt.scale = 0.5;
     std::vector<ObjectVdb*> vdb_objects = {&blob_left, &blob_rigt};
     std::vector<uint8_t> colors = {0, 1};
 
@@ -236,12 +237,14 @@ void Simulation::step(){
     current_time_step++;
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    runtime_total = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-    std::cout << "Simulation took " << runtime_total << " milliseconds" << std::endl;
-    debug("Runtime P2G     = ", runtime_p2g     * 1000.0, " milliseconds");
-    debug("Runtime G2P     = ", runtime_g2p     * 1000.0, " milliseconds");
-    debug("Runtime Euler   = ", runtime_euler   * 1000.0, " milliseconds");
-    debug("Runtime DefGrad = ", runtime_defgrad * 1000.0, " milliseconds");
+    runtime_total += std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+    
+    // T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
+    // std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step" << std::endl;
+    // debug("Runtime P2G     = ", (runtime_p2g     * 1000.0) / steps, " milliseconds");
+    // debug("Runtime G2P     = ", (runtime_g2p     * 1000.0) / steps, " milliseconds");
+    // debug("Runtime Euler   = ", (runtime_euler   * 1000.0) / steps, " milliseconds");
+    // debug("Runtime DefGrad = ", (runtime_defgrad * 1000.0) / steps, " milliseconds");
 }
 
 bool Simulation::frameFinished(){

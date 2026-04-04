@@ -206,11 +206,13 @@ void Simulation::simulate(){
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     runtime_total = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-    std::cout << "Simulation took " << runtime_total << " milliseconds" << std::endl;
-    debug("Runtime P2G     = ", runtime_p2g     * 1000.0, " milliseconds");
-    debug("Runtime G2P     = ", runtime_g2p     * 1000.0, " milliseconds");
-    debug("Runtime Euler   = ", runtime_euler   * 1000.0, " milliseconds");
-    debug("Runtime DefGrad = ", runtime_defgrad * 1000.0, " milliseconds");
+    
+    T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
+    std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step" << std::endl;
+    debug("Runtime P2G     = ", (runtime_p2g     * 1000.0) / steps, " milliseconds");
+    debug("Runtime G2P     = ", (runtime_g2p     * 1000.0) / steps, " milliseconds");
+    debug("Runtime Euler   = ", (runtime_euler   * 1000.0) / steps, " milliseconds");
+    debug("Runtime DefGrad = ", (runtime_defgrad * 1000.0) / steps, " milliseconds");
 
     if (save_sim)
         saveTiming();
@@ -240,6 +242,7 @@ void Simulation::advanceStep(){
     }
 
     resizeGrid();
+    precomputeWeights();
 
     timer t_p2g; t_p2g.start();
     P2G();

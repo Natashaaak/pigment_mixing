@@ -63,4 +63,10 @@ public:
     #endif
 };
 
+struct ParticleNeighborhood {
+    unsigned int base_index[3]; // i_base, j_base, k_base
+    T weights[64];              // Hodnoty wip (4x4x4 pro 3D)
+    TV grads[64];                // Hodnoty grad_wip
+};
+
 #endif // DATA_STRUCTURES_HPP

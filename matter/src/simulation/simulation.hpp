@@ -138,6 +138,7 @@ public:
   void deformationUpdate();
   void MUSL();
   void positionUpdate();
+  void precomputeWeights();
   void PBCAddParticles1D();
   void PBCAddParticles(unsigned int safety_factor);
   void PBCDelParticles();
@@ -202,6 +203,8 @@ public:
   T one_over_dx_square;
   T apicDinverse;
 
+  std::vector<ParticleNeighborhood> p_neighbors;
+
   // Grid handling and remeshing
   Grid grid;
   unsigned int Nx, Ny;
@@ -245,7 +248,6 @@ public:
   T low_z;
   T high_z;
 #endif
-
 }; // end Simulation class
 
 inline TM Simulation::NeoHookeanPiola(TM & Fe){

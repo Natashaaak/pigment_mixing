@@ -19,47 +19,46 @@ void Simulation::G2P(){
 
         #pragma omp for nowait
         for(int p = 0; p < Np; p++){
+            const auto &pn = p_neighbors[p];
+            int count = 0;
             TV xp = particles.x[p];
             TV vp    = TV::Zero();
             TV flipp = TV::Zero();
             TM Bp    = TM::Zero();
-            unsigned int i_base = std::floor((xp(0)-grid.xc)*one_over_dx) - 1; // the subtraction of one is valid for both quadratic and cubic splines
-            unsigned int j_base = std::floor((xp(1)-grid.yc)*one_over_dx) - 1;
-        #ifdef THREEDIM
-            unsigned int k_base = std::floor((xp(2)-grid.zc)*one_over_dx) - 1;
-        #endif
 
-            for(int i = i_base; i < i_base+4; i++){
+            for(int i = pn.base_index[0]; i < pn.base_index[0]+4; i++){
                 T xi = grid.x[i];
-                for(int j = j_base; j < j_base+4; j++){
+                for(int j = pn.base_index[1]; j < pn.base_index[1]+4; j++){
                     T yi = grid.y[j];
         #ifdef THREEDIM
-                    for(int k = k_base; k < k_base+4; k++){
+                    for(int k = pn.base_index[2]; k < pn.base_index[2]+4; k++){
                         T zi = grid.z[k];
-                        T weight = wip(xp(0), xp(1), xp(2), xi, yi, zi, one_over_dx);
-                        vp += grid.v[ind(i,j,k)] * weight;
+                        unsigned int index = ind(i, j, k);
+                        T weight = pn.weights[count++];
+                        vp += grid.v[index] * weight;
                         if (flip_ratio < 0){ // APIC
                             TV posdiffvec = TV::Zero();
                             posdiffvec(0) = xi-xp(0);
                             posdiffvec(1) = yi-xp(1);
                             posdiffvec(2) = zi-xp(2);
-                            Bp += grid.v[ind(i,j,k)] * posdiffvec.transpose() * weight;
+                            Bp += grid.v[index] * posdiffvec.transpose() * weight;
                         }
                         if (flip_ratio >= -1){ // PIC-FLIP or AFLIP
-                            flipp += grid.flip[ind(i,j,k)] * weight;
+                            flipp += grid.flip[index] * weight;
                         }
                     } // end loop k
         #else
-                    T weight = wip(xp(0), xp(1), xi, yi, one_over_dx);
-                    vp += grid.v[ind(i,j)] * weight;
+                    unsigned int index = ind(i, j);
+                    T weight = pn.weights[count++];
+                    vp += grid.v[index] * weight;
                     if (flip_ratio < 0){ // APIC
                         TV posdiffvec = TV::Zero();
                         posdiffvec(0) = xi-xp(0);
                         posdiffvec(1) = yi-xp(1);
-                        Bp += grid.v[ind(i,j)] * posdiffvec.transpose() * weight;
+                        Bp += grid.v[index] * posdiffvec.transpose() * weight;
                     }
                     if (flip_ratio >= -1){ // PIC-FLIP or AFLIP
-                        flipp += grid.flip[ind(i,j)] * weight;
+                        flipp += grid.flip[index] * weight;
                     }
         #endif
                 } // end loop j

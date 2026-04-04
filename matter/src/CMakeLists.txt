@@ -16,6 +16,7 @@ add_library(matter_lib
 			   simulation/position_update.cpp
 			   simulation/musl.cpp
 			   simulation/pbc.cpp
+			   simulation/precompute_weight.cpp
 			   )
 
 # For clients to find headers like data_structures.hpp
