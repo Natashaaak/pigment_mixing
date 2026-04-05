@@ -50,7 +50,7 @@ private:
     BinaryDensityGrid *bdg;
     AABBc *a;
     Shader *shader, *texShader, *interpolation;
-    GLuint spheresSSBO = 0, outputTex = 0, quadVAO = 0, quadVBO = 0, normalDepthTex = 0, spatulaTex = 0;
+    GLuint spheresSSBO = 0, outputTex = 0, quadVAO = 0, quadVBO = 0, normalDepthTex = 0;
     int start = 0;
     const float floorCol[4] = {0.375f, 0.35f, 0.325f, 1.0f};
     const float clearData[4] = {1000.0f, 1000.0f, 1000.0f, 1000.0f};

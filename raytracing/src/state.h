@@ -33,7 +33,7 @@ struct State {
     int maxStepCount = 180;
     int maxSkipCount = 176;
     int stepsInside = 9;
-    bool seeSpheres = false;
+    bool seeSpheres = true;
     bool autoScaleS = false;
     float ks = 1.0f;
     float kr = 0.25f;

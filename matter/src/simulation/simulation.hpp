@@ -20,6 +20,7 @@
 #include "../objects/object_general.hpp"
 #include "../objects/object_vdb.hpp"
 #include "../objects/object_plate.hpp"
+#include "../objects/object_spatula.hpp"
 
 class Simulation{
 public:
@@ -114,7 +115,7 @@ public:
   // Objects
   std::vector<std::unique_ptr<ObjectPlate>> plates;
   std::vector<std::unique_ptr<ObjectGeneral>> objects;
-  ObjectVdb* spatula_vdb_ptr = nullptr;
+  ObjectSpatula* spatula_ptr = nullptr;
 
   // Functions
   void initialize(bool save = true, std::string dir = "output/", std::string name = "dummy");
@@ -163,7 +164,7 @@ public:
   bool frameFinished();
 
   std::pair<std::vector<T>, std::vector<T>> getGridBoundaries() const;
-  ObjectVdb* getVdbObject() const { return spatula_vdb_ptr; };
+  ObjectSpatula* getSpatulaObject() const { return spatula_ptr; };
 
   private:
 

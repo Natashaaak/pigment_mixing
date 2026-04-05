@@ -62,11 +62,11 @@ public:
 
     void setGridData(BinaryDensityGrid* bdg, AABBc* a);
 
-    std::vector<float> getSpatulaBuffer() const;
+    bool spatulaExists() const;
 
-    glm::vec3 getSpatulaDimensions() const;
+    glm::mat4 getSpatulaInvTransform() const;
 
-    glm::mat4 getSpatulaTransform() const;
+    glm::vec3 getSpatulaDim() const;
 
     void moveSpatulaY(T deltaY);
 

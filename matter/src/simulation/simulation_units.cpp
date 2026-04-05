@@ -3,6 +3,7 @@
 #include "../sampling/sampling_particles_vdb.hpp"
 #include <random>
 #include "../objects/object_vdb.hpp"
+#include "../objects/object_spatula.hpp"
 
 
 void Simulation::initializeBasic(std::string name){
@@ -61,7 +62,7 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
 
     ObjectVdb blob_left("../matter/levelsets/Blob_left.vdb");
     ObjectVdb blob_rigt("../matter/levelsets/Blob_right.vdb");
-    blob_left.scale = 0.5; blob_rigt.scale = 0.5;
+    blob_left.scale = 0.3; blob_rigt.scale = 0.3;
     std::vector<ObjectVdb*> vdb_objects = {&blob_left, &blob_rigt};
     std::vector<uint8_t> colors = {0, 1};
 
@@ -115,13 +116,15 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     // objects.push_back(std::make_unique<ObjectBump>(BC::SlipFree, friction));
     // objects.push_back(std::make_unique<ObjectGate>(BC::SlipFree, friction));
 
-    /////// Here is an example how to use ObjectVdb (uncomment includes and openvdb::initialize() above):
-    TV box_offset = TV::Zero();
-    box_offset(1) = 0.25f;
-    box_offset(0) = 1.2f;
-    T box_scale = 1;
-    objects.push_back(std::make_unique<ObjectVdb>("../matter/levelsets/box.vdb", BC::NoSlip, 0.3, box_offset, box_scale));
-    spatula_vdb_ptr = dynamic_cast<ObjectVdb*>(objects.back().get()); // store a pointer to the spatula VDB object for later use in the simulation loop
+    ////// SPATULA
+    auto spatula = std::make_unique<ObjectSpatula>(BC::NoSlip, 0.3, "hehe");
+    Eigen::Transform<T, 3, Eigen::Affine> m = Eigen::Transform<T, 3, Eigen::Affine>::Identity();
+    m.translate(Eigen::Matrix<T, 3, 1>(0.4, 0.2, 0.0)); 
+    m.rotate(Eigen::AngleAxis<T>(M_PI/2, Eigen::Matrix<T, 3, 1>::UnitZ())); // rotate 90 degrees around z-axis
+    spatula->updateTransform(m);
+    spatula_ptr = spatula.get();
+    objects.push_back(std::move(spatula));
+
 
     ////// PLASTICITY
     plastic_model = PlasticModel::DPVisc; // Perzyna model with Drucker_Prager yield surface
@@ -239,8 +242,8 @@ void Simulation::step(){
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     runtime_total += std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
     
-    // T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
-    // std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step" << std::endl;
+    T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
+    std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step" << std::endl;
     // debug("Runtime P2G     = ", (runtime_p2g     * 1000.0) / steps, " milliseconds");
     // debug("Runtime G2P     = ", (runtime_g2p     * 1000.0) / steps, " milliseconds");
     // debug("Runtime Euler   = ", (runtime_euler   * 1000.0) / steps, " milliseconds");

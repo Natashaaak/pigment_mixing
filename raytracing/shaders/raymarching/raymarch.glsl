@@ -7,7 +7,6 @@ struct Ray{
 ///State structure for 3D DDA algorithm
 struct State{
     ivec3 cell;
-    ivec3 smallestCell;
     ivec3 move;
     vec3 delta; // is used only when moving inside the voxel
     vec3 tNext;
@@ -30,8 +29,6 @@ layout(binding = 3) uniform sampler2D Dall;
 layout(binding = 4) uniform sampler2D Nscreen;
 
 layout(binding = 5) uniform usampler2D VarianceTex;
-
-layout(binding = 6) uniform sampler3D spatulaTex;
 
 layout(std430, binding = 0) buffer spheres {
     vec4 spheresData[];
@@ -113,8 +110,8 @@ uniform uint maxLevel;
 uniform bool isAni;
 
 uniform mat4 invSpatulaTransform;
+uniform bool has_spatula;
 uniform vec3 spatulaDim;
-uniform bool has_vdb;
 
 const float pi = 3.141592f;
 const int lcs = 16; //equal to local size
@@ -124,20 +121,20 @@ const int MAX_INT = 2147483647;
 const vec3 lightDirView = normalize(vec3(1.0f, -1.0f, -1.0f));
 
 uniform vec3 palette[3];
-const vec3 vdb_color = vec3(1.0f, 0.0f, 0.0f);
+const vec3 spatula_color = vec3(1.0f, 0.0f, 0.0f);
 const vec4 floorCol = vec4(0.375f, 0.35f, 0.325f, 1.0f);
 ivec3 cS4 = ivec3(3);
 ivec3 cS2 = ivec3(1);
 uint variance = 0;
 
-bool rayMarchVDB(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
+bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
     // Convert ray to local space of the spatula
     vec3 origin = (invSpatulaTransform * vec4(ray.start, 1.0)).xyz;
     vec3 direction = (invSpatulaTransform * vec4(ray.dir, 0.0)).xyz;
 
     // Slab test
     vec3 invDir = 1.0 / (direction + sign(direction) * 1e-9); 
-    vec3 t0 = (vec3(0.0) - origin) * invDir;
+    vec3 t0 = (-spatulaDim - origin) * invDir;
     vec3 t1 = (spatulaDim - origin) * invDir;
     
     vec3 tMin = min(t0, t1);
@@ -149,52 +146,31 @@ bool rayMarchVDB(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
     // if the ray misses the box or the box is entirely behind us
     if (t_near > t_far || t_far < 0.0) return false;
 
-    // Start marching
-    // start at t_near if it's positive, otherwise start at 0 (we are inside the box)
-    float t = max(0.0, t_near); 
-    float step = 0.05; 
-
-    // Limit the number of steps since the slab test already ensures we won't waste time in empty space
-    for(int i = 0; i < 160; i++) {
-        vec3 p_local = origin + t * direction;
-        vec3 uvw = p_local / spatulaDim;
-
-        float dist = texture(spatulaTex, uvw).r;
-
-        // Surface detection
-        if(dist < 0.01) {
-            t_hit = t;
-            hit_pos = ray.start + ray.dir * t_hit;
-            return true;
-        }
-
-        // Jump by the distance returned by the SDF
-        t += max(dist, step);
-
-        // If we have left the box or exceeded the maximum depth, we are done
-        if(t > t_far || t > max_t) break;
-    }
-    return false;
+    // The slab test gives the exact intersection for a box
+    t_hit = max(0.0, t_near);
+    hit_pos = ray.start + ray.dir * t_hit;
+    return true;
 }
 
-/// Computes the normal of the spatula surface from the 3D texture
-vec3 getVDBNormal(vec3 pos_ws) {
-    vec3 eps = vec3(1.0) / spatulaDim;
-    vec3 uvw = (invSpatulaTransform * vec4(pos_ws, 1.0)).xyz / spatulaDim;
-
-    float nx = texture(spatulaTex, uvw + vec3(eps.x, 0, 0)).r - texture(spatulaTex, uvw - vec3(eps.x, 0, 0)).r;
-    float ny = texture(spatulaTex, uvw + vec3(0, eps.y, 0)).r - texture(spatulaTex, uvw - vec3(0, eps.y, 0)).r;
-    float nz = texture(spatulaTex, uvw + vec3(0, 0, eps.z)).r - texture(spatulaTex, uvw - vec3(0, 0, eps.z)).r;
-
-    vec3 normal_local = -normalize(vec3(nx, ny, nz));
-
-    vec3 normal_ws = normalize(normal_local * mat3(invSpatulaTransform));
+vec3 getSpatulaNormal(vec3 pos_ws) {
+    vec3 p_local = (invSpatulaTransform * vec4(pos_ws, 1.0)).xyz;
     
-    return normalize(mat3(view) * normal_ws);
+    // Exact analytical normal for an axis-aligned box
+    vec3 p = p_local / spatulaDim;
+    vec3 abs_p = abs(p);
+    vec3 n_local = vec3(0.0);
+    
+    if (abs_p.x >= abs_p.y && abs_p.x >= abs_p.z) n_local = vec3(sign(p_local.x), 0.0, 0.0);
+    else if (abs_p.y >= abs_p.z)                  n_local = vec3(0.0, sign(p_local.y), 0.0);
+    else                                          n_local = vec3(0.0, 0.0, sign(p_local.z));
+
+    vec3 normal_ws = normalize(n_local * mat3(invSpatulaTransform));
+    
+    return normalize(mat3(view) * -normal_ws);
 }
 
 ///Computes position and direction in the world of the ray
-void getRay(ivec2 pix, float depth, inout Ray ray){
+void getRay(ivec2 pix, float depth, out Ray ray){
     vec2 res = vec2(width, height);
     vec2 ndc = 2.0f * ((vec2(pix) + 0.5f) / res) - 1.0f; //getting ndc
     vec4 p_v = invProj * vec4(ndc, -1.0f, 1.0f); //restoring point on a near plane in view coords
@@ -205,7 +181,7 @@ void getRay(ivec2 pix, float depth, inout Ray ray){
     ray.dir = normalize((invView * vec4(dir_v, 0.0f)).xyz);
 }
 ///Changes level between texels in bdg
-void changeLevel(uint level, inout Ray ray, inout State state){
+void changeLevel(uint level, in Ray ray, inout State state){
     if(state.currLevel == level) return;
     vec3 pos = ray.start + ray.dir * state.tcurr;
     pos += ray.dir * 1e-4;
@@ -214,17 +190,18 @@ void changeLevel(uint level, inout Ray ray, inout State state){
     state.currLevel = level;
 }
 ///Initializes state of 3D DDA
-void stateInit(inout State state, inout Ray ray){
+void stateInit(out State state, in Ray ray){
     state.cell = ivec3(floor((ray.start - gridStart) / voxelSize));
     bvec3 zero = equal(ray.dir, vec3(0.0f));
     state.delta = mix(voxelSize / abs(ray.dir), vec3(MAX_INT), zero);
     state.move = ivec3(sign(ray.dir));
     state.insideStepSize = voxelSize / float(stepsInside);
     state.tcurr = 0.0f;
-    state.currLevel = 1;
+    state.currLevel = 1u;
+    state.tNext = vec3(0.0f);
 }
 ///Checks if a texel(or voxel) for current bdg might contain surface
-uint getPossibility(inout State state){
+uint getPossibility(in State state){
     uint possibility = 0;
     if(state.currLevel == 4u){
         bvec3 outOfBoundsGreat = greaterThanEqual(state.cell, cS4);
@@ -253,7 +230,7 @@ uint getPossibility(inout State state){
     return possibility;
 }
 ///Moves the ray inside with tiny steps
-void moveInside(inout State state, inout Ray ray){
+void moveInside(inout State state, in Ray ray){
     bvec3 rl = equal(state.move, ivec3(1));
     vec3 nextCoord = vec3(mix(gridStart + vec3(state.cell) * h, gridStart + (vec3(state.cell)+ vec3(1.0f)) * h, rl));
     bvec3 b = equal(state.move, ivec3(0));
@@ -267,7 +244,7 @@ void moveInside(inout State state, inout Ray ray){
     }
 }
 ///Skips to the next voxel/texel
-void skipToNext(inout State state, inout Ray ray){
+void skipToNext(inout State state, in Ray ray){
     vec3 pos = ray.start + ray.dir * state.tcurr;
     bvec3 rl = equal(state.move, ivec3(1));
     vec3 nextCoord = vec3(mix(gridStart + vec3(state.cell) * (h * float(state.currLevel)),
@@ -280,7 +257,7 @@ void skipToNext(inout State state, inout Ray ray){
 //    state.tNext[minMove] += state.delta[minMove];
 }
 ///Traverses the ray until it finds the cell marked in bdg
-void updateTCurr(inout State state, inout Ray ray){
+void updateTCurr(inout State state, in Ray ray){
     if(state.currLevel == 1u && getPossibility(state) == 1u){
         moveInside(state, ray);
         return;
@@ -449,16 +426,16 @@ void main(){
     Ray ray_vdb;
     getRay(origPix, 0.0f, ray_vdb);
     
-    float t_vdb = 1e6; 
-    bool hit_vdb = false;
+    float t_spatula = 1e6; 
+    bool hit_spatula = false;
 
-    if (has_vdb) {
+    if (has_spatula) {
         float t_temp;
         vec3 p_temp;
-        // Sphere tracing for spatula
-        if (rayMarchVDB(ray_vdb, t_temp, p_temp, 1000.0)) {
-            t_vdb = t_temp;
-            hit_vdb = true;
+        // SDF sphere tracing for spatula
+        if (rayMarchSpatula(ray_vdb, t_temp, p_temp, 1000.0)) {
+            t_spatula = t_temp;
+            hit_spatula = true;
         }
     }
 
@@ -477,7 +454,7 @@ void main(){
             }
             updateTCurr(state, ray_mpm);
 
-            if (hit_vdb && (state.tcurr + depth) > t_vdb) break;  // if we already hit the VDB surface and ray for mpm is farther than that, we can stop
+            if (hit_spatula && (state.tcurr + depth) > t_spatula) break;  // if we already hit the spatula surface and ray for mpm is farther than that, we can stop
 
             vec3 pos = ray_mpm.start + ray_mpm.dir * state.tcurr;
             if(getPossibility(state) == 1000u){
@@ -509,19 +486,18 @@ void main(){
         }
     }
 
-    if(hit_vdb){
-        if (hit_floor && t_floor < t_vdb) {
-            hit_vdb = false; // "Zrušíme" zásah špachtle, protože je pod zemí
+    if(hit_spatula){
+        if (hit_floor && t_floor < t_spatula) {
+            hit_spatula = false; // "Zrušíme" zásah špachtle, protože je pod zemí
         } else {
-            vec3 pos_vdb = ray_vdb.start + ray_vdb.dir * t_vdb;
-            vec3 N = getVDBNormal(pos_vdb);
+            vec3 pos_spatula = ray_vdb.start + ray_vdb.dir * t_spatula;
+            vec3 N = getSpatulaNormal(pos_spatula);
 
             float diff = max(dot(N, lightDirView), 0.0);
-            vec3 final_vdb_color = vdb_color * (diff * 0.8 + 0.2);
+            vec3 final_spatula_color = spatula_color * (diff * 0.8 + 0.2);
 
-            imageStore(outTex, origPix, vec4(final_vdb_color, 1.0f));
-            // imageStore(outTex, origPix, vec4(vec3(t_vdb * 0.1), 1.0f));
-            float viewZ = (view * vec4(pos_vdb, 1.0)).z;
+            imageStore(outTex, origPix, vec4(final_spatula_color, 1.0f));
+            float viewZ = (view * vec4(pos_spatula, 1.0)).z;
             imageStore(normalDepthTex, origPix, vec4(N, viewZ));
             foundSurface = true;
         }
@@ -541,8 +517,9 @@ void main(){
         // Use absolute dot product and add ambient light so it doesn't render completely black
         float diff = abs(dot(N_floor_view, lightDirView)) * 0.7 + 0.3;
         
+        float floorViewZ = (view * vec4(hit_pos, 1.0)).z; // Sjednocení prostoru hloubky
+        imageStore(normalDepthTex, origPix, vec4(N_floor_view, floorViewZ));
         imageStore(outTex, origPix, vec4(floor_color * diff, 1.0));
-        imageStore(normalDepthTex, origPix, vec4(N_floor_view, hit_pos.z));
         foundSurface = true;
     }
     if(!foundSurface){

@@ -17,6 +17,7 @@ void BinaryDensityGrid::createVectors(AABBc *a, MPMIntegrationSim *mpm) {
 void BinaryDensityGrid::fillCells(MPMIntegrationSim *mpm, AABBc *a) {
     const auto &spheresData = mpm->getParticles();
     std::vector<glm::uvec2>(cells.size(), {0, 0}).swap(cells); //setting to zero
+    #pragma omp parallel for schedule(static)
     for (int i = 0; i < mpm->getParticleAmount(); ++i) { //counting particles in each cell
         glm::vec3 cell = glm::floor((glm::vec3(spheresData[i]) - a->gridStart) / a->voxelS);
 
@@ -24,6 +25,7 @@ void BinaryDensityGrid::fillCells(MPMIntegrationSim *mpm, AABBc *a) {
             continue; //checking boundaries
 
         unsigned id = cell.x + a->cellsX * (cell.z * a->cellsY + cell.y); //finding according cell
+        #pragma omp atomic
         cells[id].x++;
     }
     //counting offsets
@@ -31,13 +33,19 @@ void BinaryDensityGrid::fillCells(MPMIntegrationSim *mpm, AABBc *a) {
         cells[i].y += cells[i-1].x + cells[i-1].y;
     }
     std::vector<unsigned> appeared(cells.size(), 0);
+    #pragma omp parallel for schedule(static)
     for (int i = 0; i < mpm->getParticleAmount(); ++i) {
         glm::vec3 cell = glm::floor((glm::vec3(spheresData[i]) - a->gridStart) / a->voxelS);
         if (cell.x < 0 || cell.y < 0 || cell.z < 0 || cell.x >= a->cellsX || cell.y >= a->cellsY || cell.z >= a->cellsZ)
             continue; //checking boundaries
         unsigned id = cell.x + a->cellsX * (cell.z * a->cellsY + cell.y); //finding according cell
-        unsigned index = cells[id].y + appeared[id];
-        appeared[id]++;
+        unsigned local_appeared;
+        #pragma omp atomic capture
+        {
+            local_appeared = appeared[id];
+            appeared[id]++;
+        }
+        unsigned index = cells[id].y + local_appeared;
         ids[index] = i;
     }
 }
@@ -200,11 +208,3 @@ BinaryDensityGrid::~BinaryDensityGrid() {
     glDeleteBuffers(1, &cellsSSBO);
     glDeleteBuffers(1, &idsSSBO);
 }
-
-
-
-
-
-
-
-

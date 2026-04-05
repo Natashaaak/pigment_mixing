@@ -95,10 +95,10 @@ void processInput(GLFWwindow *window, int key, int scancode, int action, int mod
         debug("Take screenshot: ", takeScreenshot);
     }
     if(key == GLFW_KEY_DOWN && action == GLFW_PRESS){
-        mpm->moveSpatulaY(-0.01f);
+        mpm->moveSpatulaY(-0.05f);
     }
     if(key == GLFW_KEY_UP && action == GLFW_PRESS){
-        mpm->moveSpatulaY(0.01f);
+        mpm->moveSpatulaY(0.05);
     }
 }
 

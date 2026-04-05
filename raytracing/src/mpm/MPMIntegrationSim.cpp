@@ -76,61 +76,45 @@ void MPMIntegrationSim::setGridData(BinaryDensityGrid* bdg, AABBc* a) {
     this->aabb = a;
 }
 
-std::vector<float> MPMIntegrationSim::getSpatulaBuffer() const
-{
-    if (!sim->getVdbObject())
-        return {};
-
-    return sim->getVdbObject()->buffer;
+bool MPMIntegrationSim::spatulaExists() const {
+    return sim->getSpatulaObject() != nullptr;
 }
 
-glm::vec3 MPMIntegrationSim::getSpatulaDimensions() const
+glm::mat4 MPMIntegrationSim::getSpatulaInvTransform() const
 {
-    if (!sim->getVdbObject())
-        return glm::vec3(0.0f);
-
-    auto dim = sim->getVdbObject()->dim;
-    return glm::vec3(dim.x(), dim.y(), dim.z());
-}
-
-glm::mat4 MPMIntegrationSim::getSpatulaTransform() const
-{
-    if(!sim->getVdbObject())
+    if(!sim->getSpatulaObject())
         return glm::mat4(1.0f);
 
-    auto vdbObj = sim->getVdbObject();
-    auto offset = vdbObj->offset;
-    float scale = vdbObj->scale;
-    
-    // Coordinates of the spatula bounding box
-    openvdb::CoordBBox bbox = vdbObj->grid->evalActiveVoxelBoundingBox();
-    openvdb::Vec3d minIndexSpace(bbox.min().x(), bbox.min().y(), bbox.min().z());
-    
-    // transfer coordinates into world space
-    openvdb::Vec3d minWorld = vdbObj->grid->indexToWorld(minIndexSpace);
+    auto transform = sim->getSpatulaObject()->invTransform.matrix();
+    // convert to glm::mat4
+    glm::mat4 glmTransform;
+    for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+            // Eigen (row, col) -> GLM [col][row]
+            glmTransform[col][row] = (float)transform(row, col); 
+        }
+    }
+    return glmTransform;
+}
 
-    glm::mat4 transform(1.0f);
-    
-    #ifdef THREEDIM
-    transform = glm::translate(transform, glm::vec3(offset.x(), offset.y(), offset.z()));
-    #else
-    transform = glm::translate(transform, glm::vec3(offset.x(), offset.y(), 0.0f));
-    #endif
-    transform = glm::scale(transform, glm::vec3(scale));
-    transform = glm::translate(transform, glm::vec3(minWorld.x(), minWorld.y(), minWorld.z()));
-    
-    float vdbVoxelSize = vdbObj->grid->voxelSize()[0];
-    transform = glm::scale(transform, glm::vec3(vdbVoxelSize));
-    return transform;
+glm::vec3 MPMIntegrationSim::getSpatulaDim() const
+{
+    if (!sim->getSpatulaObject())
+        return glm::vec3(0.0f);
+        
+    auto spatula = sim->getSpatulaObject();
+    return glm::vec3((float)spatula->halfWidth, (float)spatula->halfThickness, (float)spatula->halfLength);
 }
 
 void MPMIntegrationSim::moveSpatulaY(T deltaY)
 {
-    if (!sim->getVdbObject())
+    if (!sim->getSpatulaObject())
         return;
 
-    auto vdbObj = sim->getVdbObject();
-    vdbObj->offset.y() += deltaY;
+    auto spatula = sim->getSpatulaObject();
+    Eigen::Transform<T, 3, Eigen::Affine> m = spatula->transform;
+    m.pretranslate(Eigen::Matrix<T, 3, 1>(0.0, deltaY, 0.0)); // pretranslate moves in world-space
+    spatula->updateTransform(m);
 }
 
 void MPMIntegrationSim::neighborsByIndex(unsigned i, std::vector<unsigned int> &out) {
