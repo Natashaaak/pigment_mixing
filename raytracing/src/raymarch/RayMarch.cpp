@@ -196,7 +196,6 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     glDispatchCompute((groupCountX + 4 - 1) / 4, (groupCountY + 4 - 1) / 4, 1);
     }
 
-
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
     if (!state.debugMode || !state.testFullRes) {
         interpolation->use();

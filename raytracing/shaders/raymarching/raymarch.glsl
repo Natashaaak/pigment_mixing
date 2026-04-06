@@ -112,6 +112,8 @@ uniform bool isAni;
 uniform mat4 invSpatulaTransform;
 uniform bool has_spatula;
 uniform vec3 spatulaDim;
+float r1 = 0.5;
+float r2 = 0.2;
 
 const float pi = 3.141592f;
 const int lcs = 16; //equal to local size
@@ -127,45 +129,82 @@ ivec3 cS4 = ivec3(3);
 ivec3 cS2 = ivec3(1);
 uint variance = 0;
 
+float sdSpatula(vec3 p) {
+    // Půl-rozměry lichoběžníku
+    float b1 = spatulaDim.x;       // Spodní šířka
+    float b2 = spatulaDim.x * 0.6; // Horní šířka
+    float he = spatulaDim.z;       // Polovina výšky (Z)
+
+    // 1. Přesný 2D SDF lichoběžníku (Centrovaný kolem Z=0)
+    vec2 p2d = vec2(abs(p.x), p.z);
+    vec2 k1 = vec2(b2, he);
+    vec2 k2 = vec2(b2 - b1, 2.0 * he);
+    
+    vec2 ca = vec2(p2d.x - min(p2d.x, (p2d.y < 0.0) ? b1 : b2), abs(p2d.y) - he);
+    vec2 cb = p2d - k1 + k2 * clamp(dot(k1 - p2d, k2) / dot(k2, k2), 0.0, 1.0);
+    float s = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
+    float d_2d = s * sqrt(min(dot(ca, ca), dot(cb, cb)));
+
+    // 2. Korektní 3D extruze (Tloušťka v ose Y) pro sphere tracing
+    float d_y = abs(p.y) - spatulaDim.y;
+    vec2 w = vec2(d_2d, d_y);
+    return min(max(w.x, w.y), 0.0) + length(max(w, 0.0));
+}
+
 bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
-    // Convert ray to local space of the spatula
     vec3 origin = (invSpatulaTransform * vec4(ray.start, 1.0)).xyz;
     vec3 direction = (invSpatulaTransform * vec4(ray.dir, 0.0)).xyz;
 
-    // Slab test
+    // 1. Slab test pro Bounding Box (urychlení)
     vec3 invDir = 1.0 / (direction + sign(direction) * 1e-9); 
-    vec3 t0 = (-spatulaDim - origin) * invDir;
-    vec3 t1 = (spatulaDim - origin) * invDir;
-    
+    vec3 bbMin = vec3(-spatulaDim.x, -spatulaDim.y, -spatulaDim.z);
+    vec3 bbMax = vec3( spatulaDim.x,  spatulaDim.y,  spatulaDim.z);
+    vec3 t0 = (bbMin - origin) * invDir;
+    vec3 t1 = (bbMax - origin) * invDir;
     vec3 tMin = min(t0, t1);
     vec3 tMax = max(t0, t1);
     
     float t_near = max(tMin.x, max(tMin.y, tMin.z));
     float t_far = min(tMax.x, min(tMax.y, tMax.z));
 
-    // if the ray misses the box or the box is entirely behind us
     if (t_near > t_far || t_far < 0.0) return false;
 
-    // The slab test gives the exact intersection for a box
-    t_hit = max(0.0, t_near);
-    hit_pos = ray.start + ray.dir * t_hit;
-    return true;
+    // 2. Sphere Tracing uvnitř Bounding Boxu
+    float t = max(0.0, t_near);
+    for(int i = 0; i < 128; i++) {
+        vec3 p_local = origin + direction * t;
+        float dist = sdSpatula(p_local);
+
+        if(dist < 0.0001) { // Povrch nalezen
+            t_hit = t;
+            hit_pos = ray.start + ray.dir * t_hit;
+            return true;
+        }
+
+        t += dist;
+        if(t > t_far || t > max_t) break;
+    }
+
+    return false;
 }
 
 vec3 getSpatulaNormal(vec3 pos_ws) {
+    // Transformace bodu do lokálního prostoru
     vec3 p_local = (invSpatulaTransform * vec4(pos_ws, 1.0)).xyz;
     
-    // Exact analytical normal for an axis-aligned box
-    vec3 p = p_local / spatulaDim;
-    vec3 abs_p = abs(p);
-    vec3 n_local = vec3(0.0);
+    // Numerický gradient (centrální diference)
+    vec2 e = vec2(0.0005, 0.0);
+    vec3 n_local = normalize(vec3(
+        sdSpatula(p_local + e.xyy) - sdSpatula(p_local - e.xyy),
+        sdSpatula(p_local + e.yxy) - sdSpatula(p_local - e.yxy),
+        sdSpatula(p_local + e.yyx) - sdSpatula(p_local - e.yyx)
+    ));
     
-    if (abs_p.x >= abs_p.y && abs_p.x >= abs_p.z) n_local = vec3(sign(p_local.x), 0.0, 0.0);
-    else if (abs_p.y >= abs_p.z)                  n_local = vec3(0.0, sign(p_local.y), 0.0);
-    else                                          n_local = vec3(0.0, 0.0, sign(p_local.z));
-
+    // Transformace normály zpět do World Space
+    // Korektní transformace normály pomocí inverzní transponované matice (L2W^-T)
     vec3 normal_ws = normalize(n_local * mat3(invSpatulaTransform));
     
+    // Transformace do View Space pro lighting
     return normalize(mat3(view) * -normal_ws);
 }
 

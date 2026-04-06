@@ -19,6 +19,39 @@ public:
         halfThickness = 0.015; // 1 mm
     }
 
+    // Pomocná SDF funkce (vzdálenost k povrchu v lokálním prostoru)
+    T sdSpatula(const Eigen::Vector3f& p) const {
+        // Půl-rozměry lichoběžníku
+        float b1 = (float)halfWidth;       // Spodní šířka
+        float b2 = (float)halfWidth * 0.6f; // Horní šířka
+        float he = (float)halfLength;       // Polovina výšky (Z)
+
+        // 1. Přesný 2D SDF lichoběžníku (Centrovaný kolem Z=0)
+        Eigen::Vector2f p2d(std::abs(p.x()), p.z());
+        Eigen::Vector2f k1(b2, he);
+        Eigen::Vector2f k2(b2 - b1, 2.0f * he);
+        
+        Eigen::Vector2f ca(p2d.x() - std::min(p2d.x(), (p2d.y() < 0.0f) ? b1 : b2), std::abs(p2d.y()) - he);
+        
+        float dot_val = (k1 - p2d).dot(k2) / k2.dot(k2);
+        float clamped_val = std::max(0.0f, std::min(1.0f, dot_val));
+        Eigen::Vector2f cb = p2d - k1 + k2 * clamped_val;
+        
+        float s = (cb.x() < 0.0f && ca.y() < 0.0f) ? -1.0f : 1.0f;
+        float d_2d = s * std::sqrt(std::min(ca.dot(ca), cb.dot(cb)));
+
+        // 2. Korektní 3D extruze (Tloušťka v ose Y) pro sphere tracing
+        float d_y = std::abs(p.y()) - (float)halfThickness;
+        Eigen::Vector2f w(d_2d, d_y);
+        
+        float max_w_xy = std::max(w.x(), w.y());
+        float ext_x = std::max(w.x(), 0.0f);
+        float ext_y = std::max(w.y(), 0.0f);
+        float ext_length = std::sqrt(ext_x * ext_x + ext_y * ext_y);
+        
+        return (T)(std::min(max_w_xy, 0.0f) + ext_length);
+    }
+
     bool inside(const TV& X_in) const override {
 
         // Definujeme 3D vektor se správným typem T (např. float)
@@ -29,71 +62,46 @@ public:
         worldPos << (float)X_in(0), 0.0f, (float)X_in(1), 1.0f; // 2D X a Z
 #endif
 
-        Eigen::Vector4f localPos = invTransform.matrix() * worldPos;
-        Eigen::Vector3f localXi = localPos.head<3>();
+        Eigen::Vector3f localPos = (invTransform.matrix() * worldPos).head<3>();
 
-    #ifdef THREEDIM
-        // 3D test: Plocha v rovině XZ, tloušťka v ose Y
-        if (std::abs(localXi(0)) < halfWidth && std::abs(localXi(2)) < halfLength) {
-            return std::abs(localXi(1)) < halfThickness; 
-        }
-    #else
-        // 2D test: Úsečka v ose X, tloušťka v ose Y
-        if (std::abs(localXi(0)) < halfWidth) {
-            return std::abs(localXi(1)) < halfThickness;
-        }
-    #endif
-        return false; 
+        return sdSpatula(localPos) < (T)0.0;
     }
 
     TV normal(const TV& X_in) const override {
-        // Definujeme 3D vektor se správným typem T (např. float)
         Eigen::Vector4f worldPos;
-#ifdef THREEDIM
+    #ifdef THREEDIM
         worldPos << (float)X_in(0), (float)X_in(1), (float)X_in(2), 1.0f;
-#else
-        worldPos << (float)X_in(0), 0.0f, (float)X_in(1), 1.0f; // 2D X a Z
-#endif
+    #else
+        worldPos << (float)X_in(0), 0.0f, (float)X_in(1), 1.0f;
+    #endif
 
-        Eigen::Vector4f localPos = invTransform.matrix() * worldPos;
-        Eigen::Vector3f localXi = localPos.head<3>();
+        Eigen::Vector3f p = (invTransform * worldPos).head<3>();
+
+        // Numerický gradient (centrální diference)
+        T e = (T)0.0001;
+        Eigen::Matrix<T, 3, 1> n_local;
+        n_local << 
+            sdSpatula(p + Eigen::Vector3f(e, 0, 0)) - sdSpatula(p - Eigen::Vector3f(e, 0, 0)),
+            sdSpatula(p + Eigen::Vector3f(0, e, 0)) - sdSpatula(p - Eigen::Vector3f(0, e, 0)),
+            sdSpatula(p + Eigen::Vector3f(0, 0, e)) - sdSpatula(p - Eigen::Vector3f(0, 0, e));
         
-        // Find which face is closest to return the correct outward normal
-        TV localNormal = TV::Zero();
-        
-        T dist_x = std::abs((T)localXi(0)) - halfWidth;
-        T dist_y = std::abs((T)localXi(1)) - halfThickness;
-        
-#ifdef THREEDIM
-        T dist_z = std::abs((T)localXi(2)) - halfLength;
-        if (dist_x > dist_y && dist_x > dist_z) {
-            localNormal(0) = (localXi(0) > 0) ? (T)1 : (T)-1;
-        } else if (dist_z > dist_y && dist_z > dist_x) {
-            localNormal(2) = (localXi(2) > 0) ? (T)1 : (T)-1;
-        } else {
-            localNormal(1) = (localXi(1) > 0) ? (T)1 : (T)-1;
-        }
-#else
-        if (dist_x > dist_y) {
-            localNormal(0) = (localXi(0) > 0) ? (T)1 : (T)-1;
-        } else {
-            localNormal(1) = (localXi(1) > 0) ? (T)1 : (T)-1;
-        }
-#endif
-        
+        n_local.normalize();
+
         // Transformace normály zpět do world space (pouze rotace)
-        TV worldNormal = (transform.linear().inverse().transpose() * localNormal).normalized();
-        
-        return worldNormal;
+        // worldNormal = (ModelMatrix^-1)^T * localNormal
+        TV worldNormal3d = (transform.linear().inverse().transpose() * n_local).normalized();
+
+    #ifdef THREEDIM
+        return worldNormal3d;
+    #else
+        // Ve 2D vracíme osy X a Z (odpovídající vaší simulaci)
+        return TV(worldNormal3d(0), worldNormal3d(2));
+    #endif
     }
 
     void updateTransform(const Eigen::Transform<T, 3, Eigen::Affine>& newTransform) {
         transform = newTransform;
         invTransform = transform.inverse();
-
-        // print both matrices for debugging
-        std::cout << "Updated Spatula Transform:\n" << transform.matrix() << std::endl;
-        std::cout << "Updated Spatula Inverse Transform:\n" << invTransform.matrix() << std::endl;
     }
 
     Eigen::Transform<T, 3, Eigen::Affine> transform;
