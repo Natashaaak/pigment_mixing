@@ -120,12 +120,15 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     auto spatula = std::make_unique<ObjectSpatula>(BC::NoSlip, 0.3, "hehe");
     Eigen::Transform<T, 3, Eigen::Affine> m = Eigen::Transform<T, 3, Eigen::Affine>::Identity();
     m.translate(Eigen::Matrix<T, 3, 1>(0.4, 0.2, 0.0)); 
-    m.rotate(Eigen::AngleAxis<T>(M_PI/2, Eigen::Matrix<T, 3, 1>::UnitZ())); // rotate 90 degrees around z-axis
+    // m.rotate(Eigen::AngleAxis<T>(M_PI/2, Eigen::Matrix<T, 3, 1>::UnitZ())); // rotate 90 degrees around z-axis
     spatula->updateTransform(m);
     spatula_ptr = spatula.get();
+    T speed = M_PI / 2.0;
+    spatula->angularVelocity = TV(0, 0, speed); // rotate around y-axis at 90 degrees per second
     objects.push_back(std::move(spatula));
 
-
+    // spatula_ptr->vx_object = -0.2; // set spatula velocity in x-direction
+    debug("init done\n");
     ////// PLASTICITY
     plastic_model = PlasticModel::DPVisc; // Perzyna model with Drucker_Prager yield surface
 

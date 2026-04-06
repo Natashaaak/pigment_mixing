@@ -13,7 +13,8 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
     for(auto& obj : objects) {
         bool colliding = obj->inside(Xi);
         if (colliding) {
-            TV v_rel = vi_orig;
+            TV v_obj = obj->velocity(Xi);
+            TV v_rel = vi_orig - v_obj;
 
             if (obj->bc == BC::NoSlip) {
                 v_rel.setZero();
@@ -69,7 +70,7 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                 return;
             }
 
-            vi = v_rel;
+            vi = v_rel + v_obj;
 
             // update velocity copy before next iteration
             vi_orig = vi; // Comment this line to enforce ordering of objects (i.e., use only last object in list)

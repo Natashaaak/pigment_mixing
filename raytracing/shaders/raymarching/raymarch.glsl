@@ -155,12 +155,19 @@ bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
     vec3 origin = (invSpatulaTransform * vec4(ray.start, 1.0)).xyz;
     vec3 direction = (invSpatulaTransform * vec4(ray.dir, 0.0)).xyz;
 
+    // Normalizace směru pro bezpečný sphere tracing (řeší ztenčení přes scale matici)
+    float dir_len = length(direction);
+    vec3 dir_local = direction / dir_len;
+
     // 1. Slab test pro Bounding Box (urychlení)
-    vec3 invDir = 1.0 / (direction + sign(direction) * 1e-9); 
-    vec3 bbMin = vec3(-spatulaDim.x, -spatulaDim.y, -spatulaDim.z);
-    vec3 bbMax = vec3( spatulaDim.x,  spatulaDim.y,  spatulaDim.z);
-    vec3 t0 = (bbMin - origin) * invDir;
-    vec3 t1 = (bbMax - origin) * invDir;
+    vec3 invDir = 1.0 / (dir_local + sign(dir_local) * 1e-9); 
+    // Přidáme malý padding (0.005), abychom nezačali raymarch až za tenkou stěnou
+    vec3 padding = vec3(0.005);
+    vec3 bbMin = vec3(-spatulaDim.x, -spatulaDim.y, -spatulaDim.z) - padding;
+    vec3 bbMax = vec3( spatulaDim.x,  spatulaDim.y,  spatulaDim.z) + padding;
+    vec3 paddingT = vec3(0.05); // 5 cm rezerva
+    vec3 t0 = (-spatulaDim - paddingT - origin) * invDir;
+    vec3 t1 = (spatulaDim + paddingT - origin) * invDir;
     vec3 tMin = min(t0, t1);
     vec3 tMax = max(t0, t1);
     
@@ -170,19 +177,19 @@ bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
     if (t_near > t_far || t_far < 0.0) return false;
 
     // 2. Sphere Tracing uvnitř Bounding Boxu
-    float t = max(0.0, t_near);
+    float t = max(0.0, t_near - 0.001); // mírný posun vzad pro jistotu zachycení hrany
     for(int i = 0; i < 128; i++) {
-        vec3 p_local = origin + direction * t;
+        vec3 p_local = origin + dir_local * t;
         float dist = sdSpatula(p_local);
 
         if(dist < 0.0001) { // Povrch nalezen
-            t_hit = t;
+            t_hit = t / dir_len; // Převod vzdálenosti zpět do World Space
             hit_pos = ray.start + ray.dir * t_hit;
             return true;
         }
 
         t += dist;
-        if(t > t_far || t > max_t) break;
+        if(t > t_far + 0.01 || (t / dir_len) > max_t) break;
     }
 
     return false;
@@ -192,8 +199,8 @@ vec3 getSpatulaNormal(vec3 pos_ws) {
     // Transformace bodu do lokálního prostoru
     vec3 p_local = (invSpatulaTransform * vec4(pos_ws, 1.0)).xyz;
     
-    // Numerický gradient (centrální diference)
-    vec2 e = vec2(0.0005, 0.0);
+    // Gradient - Epsilon (e.x) musí být vždy menší než celková tloušťka objektu!
+    vec2 e = vec2(0.00005, 0.0);
     vec3 n_local = normalize(vec3(
         sdSpatula(p_local + e.xyy) - sdSpatula(p_local - e.xyy),
         sdSpatula(p_local + e.yxy) - sdSpatula(p_local - e.yxy),
@@ -202,7 +209,7 @@ vec3 getSpatulaNormal(vec3 pos_ws) {
     
     // Transformace normály zpět do World Space
     // Korektní transformace normály pomocí inverzní transponované matice (L2W^-T)
-    vec3 normal_ws = normalize(n_local * mat3(invSpatulaTransform));
+    vec3 normal_ws = normalize(transpose(mat3(invSpatulaTransform)) * n_local);
     
     // Transformace do View Space pro lighting
     return normalize(mat3(view) * -normal_ws);
@@ -483,6 +490,7 @@ void main(){
         getRay(origPix, depth, ray_mpm);
         State state;
         stateInit(state, ray_mpm);
+        float dist_to_mpm_start = length(ray_mpm.start - ray_vdb.start);
         for(uint i = 0; i < maxStepCount; i++){
             if(i > maxSkipCount && !hasSkipped){
                 float depthDagg = texelFetch(Dagg, origPix, 0).r;
@@ -490,10 +498,11 @@ void main(){
                 hasSkipped = true;
                 getRay(origPix, depthDagg, ray_mpm);
                 stateInit(state, ray_mpm); //Skipping to Dagg depth and starting from there
+                dist_to_mpm_start = length(ray_mpm.start - ray_vdb.start);
             }
             updateTCurr(state, ray_mpm);
 
-            if (hit_spatula && (state.tcurr + depth) > t_spatula) break;  // if we already hit the spatula surface and ray for mpm is farther than that, we can stop
+            if (hit_spatula && (state.tcurr + dist_to_mpm_start) > t_spatula) break;  // if we already hit the spatula surface and ray for mpm is farther than that, we can stop
 
             vec3 pos = ray_mpm.start + ray_mpm.dir * state.tcurr;
             if(getPossibility(state) == 1000u){

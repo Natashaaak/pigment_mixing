@@ -16,7 +16,7 @@ public:
         // halfLength = 0.1; // 10 cm
         halfWidth = 0.25; // 55 cm
         halfLength = 0.4; // 50 cm
-        halfThickness = 0.015; // 1 mm
+        halfThickness = 0.05; // 1 mm
     }
 
     // Pomocná SDF funkce (vzdálenost k povrchu v lokálním prostoru)
@@ -104,6 +104,60 @@ public:
         invTransform = transform.inverse();
     }
 
+    TV velocity(const TV& X_in) const override {
+        // 1. Translační složka (lineární posun)
+        TV v_total = TV::Zero();
+        v_total(0) = vx_object;
+        v_total(1) = vy_object;
+#ifdef THREEDIM
+        v_total(2) = vz_object;
+#endif
+
+        // 2. Rotační složka
+        // Střed špachtle ve světových souřadnicích (sloupec 3 v matici 4x4)
+        TV center = transform.translation(); 
+        TV r = X_in - center; // Vektor od středu k bodu kolize
+
+#ifdef THREEDIM
+        // v_rot = omega x r
+        TV v_rot = angularVelocity.cross(r);
+        v_total += v_rot;
+#else
+        // Ve 2D je rotace jen skalár (kolem osy kolmé k rovině)
+        // v_rot = (-omega * r.y, omega * r.x)
+        TV v_rot;
+        v_rot << -angularVelocity2D * r(1), angularVelocity2D * r(0);
+        v_total += v_rot;
+#endif
+        return v_total;
+    }
+
+    void move(T dt) {
+        // Vytvoření inkrementální transformace (posun + rotace za jeden krok dt)
+        Eigen::Translation<T, 3> translation(vx_object * dt, vy_object * dt, 
+                                            #ifdef THREEDIM 
+                                            vz_object * dt 
+                                            #else 
+                                            0 
+                                            #endif
+                                            );
+        
+    #ifdef THREEDIM
+        // Rotace kolem lokálních os (nebo světových, podle potřeby)
+        // Předpokládáme angularVelocity ve světových souřadnicích
+        Eigen::AngleAxis<T> rotation(angularVelocity.norm() * dt, 
+                                    angularVelocity.normalized());
+        
+        // transformace = posun * rotace * původní_transformace
+        transform = translation * (transform * rotation);
+    #else
+        Eigen::Rotation2D<T> rotation(angularVelocity2D * dt);
+        // Pro 2D musíme pracovat s 3x3 submaticí nebo pomocnou 3D transformací
+    #endif
+
+        invTransform = transform.inverse();
+    }
+
     Eigen::Transform<T, 3, Eigen::Affine> transform;
     Eigen::Transform<T, 3, Eigen::Affine> invTransform;
 
@@ -111,17 +165,18 @@ public:
     T halfLength;
     T halfThickness;
 
-    // T vx_object;
-    // T vy_object;
-    // #ifdef THREEDIM
-    //     T vz_object;
-    // #endif
+    T vx_object;
+    T vy_object;
+    #ifdef THREEDIM
+        T vz_object;
+    #endif
 
-    // T vx_object_original;
-    // T vy_object_original;
-    // #ifdef THREEDIM
-    //     T vz_object_original;
-    // #endif
+    // angular velocity in radians per second
+    #ifdef THREEDIM
+    TV angularVelocity = TV::Zero(); 
+#else
+    T angularVelocity2D = 0;
+#endif
 };
 
 #endif  // OBJECTSPATULA_HPP

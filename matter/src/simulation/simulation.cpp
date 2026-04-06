@@ -285,6 +285,9 @@ void Simulation::moveObjects(){
     for (auto& obj : plates) {
         obj->move(dt, frame_dt, time);
     }
+    if (spatula_ptr != nullptr) {
+        spatula_ptr->move(dt);
+    }
 }
 
 

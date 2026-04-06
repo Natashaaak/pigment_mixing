@@ -20,7 +20,7 @@ void MPMIntegrationSim::setupScene(){
     ratios.push_back(1.0f/3.0f);
     ratios.push_back(2.0f/3.0f);
 
-    float fps = 60;
+    float fps = 30;
     sim->initializeBasic("mpm_integration_test");
     sim->setupScene(fps, ratios);
     sim->prepareSimulation();
