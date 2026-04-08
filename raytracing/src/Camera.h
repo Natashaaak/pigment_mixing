@@ -17,7 +17,7 @@ public:
      * Creates standard camera
      */
     Camera() {
-        cameraPos = glm::vec3(0.0f, 1.5f, 2.0f);
+        cameraPos = glm::vec3(0.0f, 1.5f, -2.0f);
         target = glm::vec3(0.0f, 0.0f, 0.0f);
         glm::vec3 offset = cameraPos - target;
         radius = glm::length(offset);

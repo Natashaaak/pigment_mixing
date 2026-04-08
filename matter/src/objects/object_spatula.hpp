@@ -4,6 +4,11 @@
 #include "object_general.hpp"
 #include <Eigen/Geometry>
 
+struct FrameData {
+    float pos[3];   // x, y, z (OpenGL Y-up)
+    float quat[4];  // quaternion x, y, z, w
+};
+
 class ObjectSpatula : public ObjectGeneral{
 public:
     ~ObjectSpatula(){}
@@ -17,6 +22,8 @@ public:
         halfWidth = 0.25; // 55 cm
         halfLength = 0.4; // 50 cm
         halfThickness = 0.05; // 1 mm
+
+        loadAnimation(animation_path);
     }
 
     // Pomocná SDF funkce (vzdálenost k povrchu v lokálním prostoru)
@@ -133,33 +140,94 @@ public:
     }
 
     void move(T dt) {
-        // Vytvoření inkrementální transformace (posun + rotace za jeden krok dt)
-        Eigen::Translation<T, 3> translation(vx_object * dt, vy_object * dt, 
-                                            #ifdef THREEDIM 
-                                            vz_object * dt 
-                                            #else 
-                                            0 
-                                            #endif
-                                            );
+        // 1. Výpočet aktuálního času simulace
+        // Předpokládáme, že si ve třídě držíš proměnnou 'currentTime', kterou inkrementuješ
+        currentTime += dt;
+
+        float floatIndex = (float)currentTime * 60.0f; // 60 FPS export
+        int i0 = static_cast<int>(std::floor(floatIndex));
+        int i1 = i0 + 1;
+
+        // Kontrola mezí animace
+        if (i1 >= animation_data.size()) {
+            // Zastavit na konci nebo smyčkovat (zde zastavíme)
+            vx_object = vy_object = vz_object = 0;
+            angularVelocity = TV::Zero();
+            return;
+        }
+
+        float t = floatIndex - (float)i0;
+
+        // 2. Načtení sousedních transformací
+        const auto& f0 = animation_data[i0];
+        const auto& f1 = animation_data[i1];
+
+        // 3. Interpolace pozice (Lerp)
+        Eigen::Vector3f p0(f0.pos[0], f0.pos[1], f0.pos[2]);
+        Eigen::Vector3f p1(f1.pos[0], f1.pos[1], f1.pos[2]);
+        Eigen::Vector3f p_interp = p0 + t * (p1 - p0);
+
+        // 4. Interpolace rotace (Slerp)
+        Eigen::Quaternionf q0(f0.quat[3], f0.quat[0], f0.quat[1], f0.quat[2]); // w, x, y, z
+        Eigen::Quaternionf q1(f1.quat[3], f1.quat[0], f1.quat[1], f1.quat[2]);
+        Eigen::Quaternionf q_interp = q0.slerp(t, q1);
+
+        // 5. AKTUALIZACE RYCHLOSTÍ (Klíčové pro MPM stabilitu)
+        // Rychlost v = (p_new - p_old) / dt
+        Eigen::Vector3f oldPos = transform.translation().template cast<float>();
+        Eigen::Vector3f velocity3f = (p_interp - oldPos) / (float)dt;
         
+        vx_object = (T)velocity3f.x();
+        vy_object = (T)velocity3f.y();
     #ifdef THREEDIM
-        // Rotace kolem lokálních os (nebo světových, podle potřeby)
-        // Předpokládáme angularVelocity ve světových souřadnicích
-        Eigen::AngleAxis<T> rotation(angularVelocity.norm() * dt, 
-                                    angularVelocity.normalized());
-        
-        // transformace = posun * rotace * původní_transformace
-        transform = translation * (transform * rotation);
-    #else
-        Eigen::Rotation2D<T> rotation(angularVelocity2D * dt);
-        // Pro 2D musíme pracovat s 3x3 submaticí nebo pomocnou 3D transformací
+        vz_object = (T)velocity3f.z();
     #endif
+
+        // Výpočet úhlové rychlosti (omega) z rozdílu kvaternionů
+        // dq = q1 * q0_inv -> omega = 2 * log(dq) / dt
+        Eigen::Quaternionf dq = q_interp * Eigen::Quaternionf(transform.linear().template cast<float>()).conjugate();
+        Eigen::AngleAxisf aa(dq);
+        Eigen::Vector3f omega = (aa.axis() * aa.angle()) / (float)dt;
+
+    #ifdef THREEDIM
+        angularVelocity = omega.template cast<T>();
+    #else
+        angularVelocity2D = (T)omega.y(); // V 2D simulaci osa rotace obvykle kolmá na rovinu
+    #endif
+
+        // 6. FINÁLNÍ TRANSFORMAČNÍ MATICE
+        transform.setIdentity();
+        transform.translate(p_interp.template cast<T>());
+        transform.rotate(q_interp.template cast<T>());
 
         invTransform = transform.inverse();
     }
 
+    void loadAnimation(const std::string& path) {
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
+        if (!file) {
+            debug("Failed to open animation file: ", path.c_str());
+            return;
+        }
+
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
+
+        std::vector<FrameData> buffer(size / sizeof(FrameData));
+        if (file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+            animation_data = buffer;
+            debug("Loaded animation with ", animation_data.size(), " frames");
+        }
+    }
+
     Eigen::Transform<T, 3, Eigen::Affine> transform;
     Eigen::Transform<T, 3, Eigen::Affine> invTransform;
+
+    std::vector<FrameData> animation_data;
+    const std::string animation_path = "../matter/levelsets/spatula_motion.bin";
+    const float animation_fps = 60.0f;
+    T currentTime = 0; 
+
 
     T halfWidth;
     T halfLength;

@@ -123,8 +123,8 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     // m.rotate(Eigen::AngleAxis<T>(M_PI/2, Eigen::Matrix<T, 3, 1>::UnitZ())); // rotate 90 degrees around z-axis
     spatula->updateTransform(m);
     spatula_ptr = spatula.get();
-    T speed = M_PI / 2.0;
-    spatula->angularVelocity = TV(0, 0, speed); // rotate around y-axis at 90 degrees per second
+    // T speed = M_PI / 2.0;
+    // spatula->angularVelocity = TV(0, 0, speed); // rotate around y-axis at 90 degrees per second
     objects.push_back(std::move(spatula));
 
     // spatula_ptr->vx_object = -0.2; // set spatula velocity in x-direction
