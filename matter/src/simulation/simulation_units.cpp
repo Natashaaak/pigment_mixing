@@ -5,6 +5,7 @@
 #include "../objects/object_vdb.hpp"
 #include "../objects/object_spatula.hpp"
 
+std::string g_spatula_anim_path = "../matter/levelsets/spatula_motion_squish.bin";
 
 void Simulation::initializeBasic(std::string name){
     std::cout << "-----------------------------------------------------------------------------------" << std::endl;
@@ -57,8 +58,6 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     #ifdef THREEDIM
         Lz = 0.3;
     #endif
-    // sampleParticles(*this, k_rad);
-    // TODO!!!
 
     ObjectVdb blob_left("../matter/levelsets/Blob_left.vdb");
     ObjectVdb blob_rigt("../matter/levelsets/Blob_right.vdb");
@@ -68,77 +67,28 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
 
     sampleParticlesFromVdb(*this, vdb_objects, colors, 0.01f);
 
-    // load all objects to be sapmled
-    // get their bounding boxes (L)
-    // pass L into sampling function
-    // define color for these particles
-    // ohlidat Np
-    // assign color
-
-    // TODO: optimize color assignment - same colors are grouped together
-    // do i need to store array of color indices or can i just store the number of particles of each color?
-
-    // for(int p = 0; p < Np; p++){
-    //     particles.x[p](0) -= 0.5*Lx;
-    //     particles.x[p](1) += 0.5*dx;
-    // }
     grid_reference_point = TV::Zero();
 
-    ////// ASSIGN COLORS BASED ON RATIOS
-    // get random number in [0,1]
-    // bool setColorByRatio = true;
-    // if(setColorByRatio){
-    //     std::default_random_engine generator;
-    //     std::uniform_real_distribution<T> distribution(0.0,1.0);
-    //     for(int p = 0; p < Np; p++){
-    //         float rand_num = distribution(generator);
-    //         uint8_t color_index = colorRatios.size();
-    //         for (size_t i = 0; i < colorRatios.size(); i++){
-    //             if (rand_num < colorRatios[i]){
-    //                 color_index = i;
-    //                 break;
-    //             }
-    //         }
-    //         particles.color[p] = color_index;
-    //     }
-    // }
-    // else {
-    //     for(int p = 0; p < Np; p++){
-    //         particles.color[p] = particles.x[p](0) < 0 ? 0 : 1; // left half is color 0, right half is color 1
-    //     }
-    // }
-
-    ////// OBJECTS AND TERRAINS
+    ////// FLOOR OBJECTS
     plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::NoSlip)); 
 
-    /////// Here are some examples how to use the objects derived from ObjectGeneral:
-    // T friction = 0.2; 
-    // objects.push_back(std::make_unique<ObjectBump>(BC::SlipFree, friction));
-    // objects.push_back(std::make_unique<ObjectGate>(BC::SlipFree, friction));
-
     ////// SPATULA
-    auto spatula = std::make_unique<ObjectSpatula>(BC::NoSlip, 0.3, "hehe");
-    Eigen::Transform<T, 3, Eigen::Affine> m = Eigen::Transform<T, 3, Eigen::Affine>::Identity();
-    m.translate(Eigen::Matrix<T, 3, 1>(0.4, 0.2, 0.0)); 
-    // m.rotate(Eigen::AngleAxis<T>(M_PI/2, Eigen::Matrix<T, 3, 1>::UnitZ())); // rotate 90 degrees around z-axis
-    spatula->updateTransform(m);
+    auto spatula = std::make_unique<ObjectSpatula>(BC::NoSlip, 0.3, "hehe", g_spatula_anim_path);
     spatula_ptr = spatula.get();
-    // T speed = M_PI / 2.0;
-    // spatula->angularVelocity = TV(0, 0, speed); // rotate around y-axis at 90 degrees per second
     objects.push_back(std::move(spatula));
 
-    // spatula_ptr->vx_object = -0.2; // set spatula velocity in x-direction
     debug("init done\n");
+
     ////// PLASTICITY
     plastic_model = PlasticModel::DPVisc; // Perzyna model with Drucker_Prager yield surface
 
     use_pradhana = true; // Supress unwanted volume expansion in Drucker-Prager models
     q_prefac = 1.0 / std::sqrt(2.0); // [default: sqrt(1/2)] Prefactor in def. of q, here q = sqrt(1/2 * s:s)
 
-    M = std::tan(30*M_PI/180.0); // Internal friction
-    q_cohesion = 0; // Yield surface's intercection of q-axis (in Pa), 0 is the cohesionless case
+    M = std::tan(10*M_PI/180.0); // Internal friction (lowered for a paste-like behavior)
+    q_cohesion = 500; // Yield surface's intercection of q-axis (in Pa) - HIGH cohesion to hold shape
     perzyna_exp = 1; // Exponent in Perzyna models
-    perzyna_visc = 0; // Viscous time parameter is Perzyna models
+    perzyna_visc = 0.5; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
 }
 
 void Simulation::prepareSimulation(){

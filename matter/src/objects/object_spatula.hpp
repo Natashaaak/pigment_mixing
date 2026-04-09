@@ -13,7 +13,7 @@ class ObjectSpatula : public ObjectGeneral{
 public:
     ~ObjectSpatula(){}
 
-    ObjectSpatula(BC bc_in = BC::NoSlip, T friction_in = 0.0, std::string name_in = "") : ObjectGeneral(bc_in, friction_in, name_in) {
+    ObjectSpatula(BC bc_in = BC::NoSlip, T friction_in = 0.0, std::string name_in = "", std::string anim_path = "../matter/levelsets/spatula_motion_squish.bin") : ObjectGeneral(bc_in, friction_in, name_in) {
         transform.setIdentity();
         invTransform.setIdentity();
 
@@ -23,7 +23,18 @@ public:
         halfLength = 0.4; // 50 cm
         halfThickness = 0.05; // 1 mm
 
+        animation_path = anim_path;
         loadAnimation(animation_path);
+
+        // set initial position and rotation based on first frame of animation
+        if (!animation_data.empty()) {
+            const auto& f0 = animation_data[0];
+            Eigen::Vector3f p0(f0.pos[0], f0.pos[1], f0.pos[2]);
+            Eigen::Quaternionf q0(f0.quat[3], f0.quat[0], f0.quat[1], f0.quat[2]);
+            transform.translate(p0.template cast<T>());
+            transform.rotate(q0.template cast<T>());
+            invTransform = transform.inverse();
+        }
     }
 
     // Pomocná SDF funkce (vzdálenost k povrchu v lokálním prostoru)
@@ -224,7 +235,7 @@ public:
     Eigen::Transform<T, 3, Eigen::Affine> invTransform;
 
     std::vector<FrameData> animation_data;
-    const std::string animation_path = "../matter/levelsets/spatula_motion.bin";
+    std::string animation_path;
     const float animation_fps = 60.0f;
     T currentTime = 0; 
 

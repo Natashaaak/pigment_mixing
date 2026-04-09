@@ -36,6 +36,8 @@ AABBc *a;
 char outputDir[256] = "output_images";
 bool takeScreenshot = false;
 
+extern std::string g_spatula_anim_path;
+
 void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
     camera->setAspect(width, height);
@@ -251,7 +253,19 @@ void guiStart(bool &start, std::string &load) {
     ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - bw) * 0.5f, (vp->WorkSize.y - totalH) * 0.5f));
 
     ImGui::BeginGroup();
+
+    static int spatula_anim_idx = 0;
+    ImGui::PushItemWidth(bw);
+    ImGui::Text("Spatula Animation:");
+    ImGui::Combo("##SpatulaAnim", &spatula_anim_idx, "Squish\0Sweep\0Inf\0\0");
+    ImGui::PopItemWidth();
+    ImGui::Dummy(ImVec2(0, 10));
+
     if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
+        if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/levelsets/spatula_motion_squish.bin";
+        else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/levelsets/spatula_motion_sweep.bin";
+        else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/levelsets/spatula_motion_inf.bin";
+
         load = std::string(EXTERNAL_DATA_PATH) + "/Scenes/DamBreakModel.json";
         start = true;
     }
