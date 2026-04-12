@@ -44,7 +44,7 @@ public:
      * Returns the link to the vector with all the particles
      * @return std::vector<glm::vec4>& parts
      */
-    const std::vector<glm::vec4>& getParticles();
+    std::vector<glm::vec4>& getParticles();
 
     const std::vector<glm::vec3> &getColors();
 
@@ -69,6 +69,10 @@ public:
     glm::vec3 getSpatulaDim() const;
 
     void moveSpatulaY(T deltaY);
+
+    bool isParticleFast(unsigned int p) const { 
+        return sim->isParticleFast(p); 
+    }
 
 private:
     Simulation* sim;

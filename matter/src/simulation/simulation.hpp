@@ -47,6 +47,7 @@ public:
   bool save_grid = false;
   bool use_mibf = false;
   bool use_musl = false;
+  bool render_fast_particles_only = false;
 
   TV grid_reference_point = 2e10 * TV::Ones();
   TV gravity = TV::Zero();
@@ -165,6 +166,8 @@ public:
 
   std::pair<std::vector<T>, std::vector<T>> getGridBoundaries() const;
   ObjectSpatula* getSpatulaObject() const { return spatula_ptr; };
+  
+  bool isParticleFast(unsigned int p) const { return particles.v[p].squaredNorm() >= (E / rho); }
 
   private:
 

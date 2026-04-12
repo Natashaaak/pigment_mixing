@@ -59,7 +59,7 @@ std::vector<glm::vec4> &MPMIntegrationSim::recountParticles() {
 }
 
 
-const std::vector<glm::vec4> &MPMIntegrationSim::getParticles() {
+std::vector<glm::vec4> &MPMIntegrationSim::getParticles() {
     return particles;
 }
 

@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <sstream>
 #include <chrono>
+#include <iomanip>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
@@ -35,6 +36,8 @@ MPMIntegrationSim *mpm;
 AABBc *a;
 char outputDir[256] = "output_images";
 bool takeScreenshot = false;
+bool screenshotsTaken = false;
+bool g_render_fast_particles_only = false;
 
 extern std::string g_spatula_anim_path;
 
@@ -59,11 +62,9 @@ void saveImage(const std::string& directory, GLFWwindow* win) {
                   flippedPixels.begin() + (height - 1 - y) * width * 3);
     }
 
-    // Generate unique filename using timestamp
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    static int frame_counter = 0;
     std::stringstream ss;
-    ss << "render_" << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S") << ".png";
+    ss << "render_" << std::setfill('0') << std::setw(5) << frame_counter++ << ".png";
     std::string filename = ss.str();
 
     try {
@@ -72,7 +73,8 @@ void saveImage(const std::string& directory, GLFWwindow* win) {
         }
         std::string filepath = directory.empty() ? filename : directory + "/" + filename;
         if (stbi_write_png(filepath.c_str(), width, height, 3, flippedPixels.data(), width * 3)) {
-            debug("Saved image to ", filepath);
+            if (frame_counter % 60 == 1) debug("Saved image to ", filepath);
+            screenshotsTaken = true;
         } else {
             debug("Failed to open file for image saving: ", filepath);
         }
@@ -211,6 +213,16 @@ void renderSpheres(bool firstRender = false) {
     int ww, wh;
     glfwGetFramebufferSize(window, &ww, &wh);
     auto& spheresData = mpm->getParticles();
+
+    rm->render_fast_particles_only = g_render_fast_particles_only;
+    if (g_render_fast_particles_only) {
+        for (unsigned int p = 0; p < mpm->getParticleAmount(); p++) {
+            // Mark slow particles to be ignored by the shader
+            if (!mpm->isParticleFast(p)) {
+                spheresData[p].w = -1.0f;
+            }
+        }
+    }
 
     rm->march(ww, wh, mpm, camera);
 
@@ -418,6 +430,9 @@ void gui() {
 
         ImGui::Text("See tiles resolution:");
         ImGui::Checkbox("##TilesRes", &state.debugMode);
+
+        ImGui::Text("Render ONLY fast particles:");
+        ImGui::Checkbox("##RenderFast", &g_render_fast_particles_only);
         //Are used for scene testing, uncomment to be able to test accelerations.
         // ImGui::Text("All cells are valid:");
         // if (ImGui::Checkbox("##cellsValid", &state.testAllFilled)) {
@@ -511,6 +526,23 @@ int mainComputeLoop() {
     delete rm;
     delete a;
     glfwTerminate();
+
+    if (takeScreenshot || screenshotsTaken) {
+        std::cout << "Creating animated GIF from screenshots..." << std::endl;
+        std::string cmd = "ffmpeg -y -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png " + std::string(outputDir) + "/animation.gif";
+        int ret = system(cmd.c_str());
+        if (ret == 0) {
+            for (const auto& entry : std::filesystem::directory_iterator(outputDir)) {
+                if (entry.path().extension() == ".png") {
+                    std::filesystem::remove(entry.path());
+                }
+            }
+            std::cout << "Screenshots deleted." << std::endl;
+        } else {
+            std::cerr << "Failed to create GIF. Make sure ffmpeg is installed on your system." << std::endl;
+        }
+    }
+
     return 0;
 }
 

@@ -108,6 +108,7 @@ uniform bool debugMode;
 uniform uint maxLevel;
 ///If should render with anisotropic kernel
 uniform bool isAni;
+uniform bool render_fast_particles_only;
 
 uniform mat4 invSpatulaTransform;
 uniform bool has_spatula;
@@ -347,6 +348,11 @@ float computeDensity(vec3 pos, out vec3 outColor){
                 uint offset = cellData.y;
                 for(uint i = 0; i < amount; i++){
                     uint sphereID = ids[offset + i];
+                    
+                    if (render_fast_particles_only && spheresData[sphereID].w < 0.0) {
+                        continue;
+                    }
+                    
                     vec4 sphere = spheresData[sphereID];
                     vec3 d = pos - sphere.xyz;
                     float r = length(d);
@@ -397,6 +403,11 @@ vec3 getObjectNormal(vec3 xij){
                 uint offset = cellData.y;
                 for(int i = 0; i < amount; i++){
                     uint sphereId = ids[offset + i];
+                    
+                    if (render_fast_particles_only && spheresData[sphereId].w < 0.0) {
+                        continue;
+                    }
+                    
                     vec4 sphere = spheresData[sphereId];
                     vec3 d = xij - sphere.xyz;
                     float over = h;
@@ -475,7 +486,7 @@ void main(){
     float t_spatula = 1e6; 
     bool hit_spatula = false;
 
-    if (has_spatula) {
+    if (has_spatula && !render_fast_particles_only) {
         float t_temp;
         vec3 p_temp;
         // SDF sphere tracing for spatula

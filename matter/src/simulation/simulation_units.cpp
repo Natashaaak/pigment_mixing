@@ -29,7 +29,7 @@ void Simulation::initializeBasic(std::string name){
 void Simulation::setupScene(const float fps_value, const std::vector<float>& colorRatios){
     openvdb::initialize();
 
-    reduce_verbose = false;
+    reduce_verbose = true;
     end_frame = 20;     // last frame to simulate
     fps = fps_value;    // frames per second
     n_threads = 8;      // number of threads in parallel
@@ -86,9 +86,13 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     q_prefac = 1.0 / std::sqrt(2.0); // [default: sqrt(1/2)] Prefactor in def. of q, here q = sqrt(1/2 * s:s)
 
     M = std::tan(10*M_PI/180.0); // Internal friction (lowered for a paste-like behavior)
-    q_cohesion = 500; // Yield surface's intercection of q-axis (in Pa) - HIGH cohesion to hold shape
-    perzyna_exp = 1; // Exponent in Perzyna models
-    perzyna_visc = 0.5; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
+    q_cohesion = 1220; // Yield surface's intercection of q-axis (in Pa) - HIGH cohesion to hold shape
+        // static cohesion is 1220, dynamic 146
+    perzyna_exp = 2.02; // Exponent in Perzyna models 
+        // can be changed to 1 or 2 or 3
+    // perzyna_visc = 0.208154907; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
+    perzyna_visc = 1; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
+        // can be between 0.1 - 1
 }
 
 void Simulation::prepareSimulation(){
@@ -196,7 +200,10 @@ void Simulation::step(){
     runtime_total += std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
     
     T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
-    std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step" << std::endl;
+    std::cout << "Frame: "               << frame              << std::endl;
+    std::cout << "               Time: " << time   << " -> "   << (frame+1)*frame_dt << std::endl;
+    std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step"
+    
     // debug("Runtime P2G     = ", (runtime_p2g     * 1000.0) / steps, " milliseconds");
     // debug("Runtime G2P     = ", (runtime_g2p     * 1000.0) / steps, " milliseconds");
     // debug("Runtime Euler   = ", (runtime_euler   * 1000.0) / steps, " milliseconds");
