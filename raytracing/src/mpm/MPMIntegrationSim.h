@@ -70,10 +70,6 @@ public:
 
     void moveSpatulaY(T deltaY);
 
-    bool isParticleFast(unsigned int p) const { 
-        return sim->isParticleFast(p); 
-    }
-
 private:
     Simulation* sim;
     

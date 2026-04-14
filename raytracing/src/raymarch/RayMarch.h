@@ -30,7 +30,6 @@ public:
      */
     void march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera* camera);
 
-    bool render_fast_particles_only = false;
 private:
     void initShader();
     void texQuadInit();

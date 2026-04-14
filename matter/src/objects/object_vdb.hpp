@@ -10,6 +10,7 @@
 #include <openvdb/io/File.h>
 #include <openvdb/tools/GridOperators.h>
 #include <openvdb/tools/Interpolation.h>
+#include <openvdb/tools/LevelSetMorph.h>
 
 // Make sure to fill the interor when creating the levelset, otherwise normals
 // and signed distances are not computed correctly
@@ -107,6 +108,16 @@ public:
             min_bbox(d) = (T)wmin(d) * scale + offset(d);
             max_bbox(d) = (T)wmax(d) * scale + offset(d);
         }
+    }
+
+    void test(ObjectVdb& other, float blend_weight = 0.5f) const {
+        // Note: LevelSetMorphing modifies the source grid (*grid) in-place. 
+        // If you need to keep the original, make a copy using grid->deepCopy() first.
+        openvdb::tools::LevelSetMorphing<GridT> morpher(*grid, *other.grid);
+        
+        // Morph the grid over a time interval.
+        // 0.0 = Source shape, 1.0 = Target shape.
+        morpher.advect(0.0, blend_weight);
     }
 
 

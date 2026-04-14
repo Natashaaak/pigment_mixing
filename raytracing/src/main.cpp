@@ -37,7 +37,6 @@ AABBc *a;
 char outputDir[256] = "output_images";
 bool takeScreenshot = false;
 bool screenshotsTaken = false;
-bool g_render_fast_particles_only = false;
 
 extern std::string g_spatula_anim_path;
 
@@ -214,16 +213,6 @@ void renderSpheres(bool firstRender = false) {
     glfwGetFramebufferSize(window, &ww, &wh);
     auto& spheresData = mpm->getParticles();
 
-    rm->render_fast_particles_only = g_render_fast_particles_only;
-    if (g_render_fast_particles_only) {
-        for (unsigned int p = 0; p < mpm->getParticleAmount(); p++) {
-            // Mark slow particles to be ignored by the shader
-            if (!mpm->isParticleFast(p)) {
-                spheresData[p].w = -1.0f;
-            }
-        }
-    }
-
     rm->march(ww, wh, mpm, camera);
 
     if (takeScreenshot && state.play) {
@@ -274,9 +263,9 @@ void guiStart(bool &start, std::string &load) {
     ImGui::Dummy(ImVec2(0, 10));
 
     if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
-        if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/levelsets/spatula_motion_squish.bin";
-        else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/levelsets/spatula_motion_sweep.bin";
-        else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/levelsets/spatula_motion_inf.bin";
+        if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
+        else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/animations/spatula_motion_sweep.bin";
+        else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/animations/spatula_motion_inf.bin";
 
         load = std::string(EXTERNAL_DATA_PATH) + "/Scenes/DamBreakModel.json";
         start = true;
@@ -431,8 +420,6 @@ void gui() {
         ImGui::Text("See tiles resolution:");
         ImGui::Checkbox("##TilesRes", &state.debugMode);
 
-        ImGui::Text("Render ONLY fast particles:");
-        ImGui::Checkbox("##RenderFast", &g_render_fast_particles_only);
         //Are used for scene testing, uncomment to be able to test accelerations.
         // ImGui::Text("All cells are valid:");
         // if (ImGui::Checkbox("##cellsValid", &state.testAllFilled)) {
@@ -529,7 +516,12 @@ int mainComputeLoop() {
 
     if (takeScreenshot || screenshotsTaken) {
         std::cout << "Creating animated GIF from screenshots..." << std::endl;
-        std::string cmd = "ffmpeg -y -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png " + std::string(outputDir) + "/animation.gif";
+        auto now = std::chrono::system_clock::now();
+        auto in_time_t = std::chrono::system_clock::to_time_t(now);
+        std::stringstream ss;
+        ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S");
+        std::string timestamp = ss.str();
+        std::string cmd = "ffmpeg -y -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png " + std::string(outputDir) + "/animation_" + timestamp + ".gif";
         int ret = system(cmd.c_str());
         if (ret == 0) {
             for (const auto& entry : std::filesystem::directory_iterator(outputDir)) {

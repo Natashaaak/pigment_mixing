@@ -13,7 +13,7 @@ class ObjectSpatula : public ObjectGeneral{
 public:
     ~ObjectSpatula(){}
 
-    ObjectSpatula(BC bc_in = BC::NoSlip, T friction_in = 0.0, std::string name_in = "", std::string anim_path = "../matter/levelsets/spatula_motion_squish.bin") : ObjectGeneral(bc_in, friction_in, name_in) {
+    ObjectSpatula(BC bc_in = BC::NoSlip, T friction_in = 0.0, std::string name_in = "", std::string anim_path = "../matter/animations/spatula_motion_squish.bin") : ObjectGeneral(bc_in, friction_in, name_in) {
         transform.setIdentity();
         invTransform.setIdentity();
 

@@ -194,8 +194,8 @@ void Simulation::plasticity(unsigned int p, unsigned int & plastic_count, TM & F
                 else{
 
                     delta_gamma = 0.01 * (q_trial - q_yield) / f_mu_prefac; // initial guess
-                    // int max_iter = 60;
-                    int max_iter = 200;
+                    int max_iter = 60;
+                    // int max_iter = 200;
                     for (int iter = 0; iter < max_iter; iter++) {
                         if (iter == max_iter - 1){ // did not break loop
                             debug("VMVisc: FATAL did not exit loop at iter = ", iter);
@@ -292,8 +292,8 @@ void Simulation::plasticity(unsigned int p, unsigned int & plastic_count, TM & F
 
                     delta_gamma = 0.01 * (q_trial - q_yield) / f_mu_prefac; // initial guess
 
-                    // int max_iter = 60;
-                    int max_iter = 200;
+                    int max_iter = 60;
+                    // int max_iter = 200;
                     for (int iter = 0; iter < max_iter; iter++) {
                         if (iter == max_iter - 1){ // did not break loop
                             debug("DPVisc: FATAL did not exit loop at iter = ", iter);
@@ -558,8 +558,8 @@ void Simulation::plasticity(unsigned int p, unsigned int & plastic_count, TM & F
 
                         delta_gamma = 0.01 * (q_trial - q_yield) / f_mu_prefac; // initial guess
 
-                        // int max_iter = 60;
-                        int max_iter = 200;
+                        int max_iter = 60;
+                        // int max_iter = 200;
                         for (int iter = 0; iter < max_iter; iter++) {
                             if (iter == max_iter - 1){ // did not break loop
                                 debug("MCCVisc: FATAL did not exit loop at iter = ", iter);

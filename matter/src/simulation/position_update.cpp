@@ -42,5 +42,17 @@ void Simulation::positionUpdate(){
             }
         }
 
+        // Enforce boundary limits to prevent unstable particles from expanding the grid infinitely
+        if (use_particle_boundaries) {
+            for (unsigned int d = 0; d < dim; ++d) {
+                if (particles.x[p](d) < particle_boundary_min(d)) {
+                    particles.x[p](d) = particle_boundary_min(d);
+                    particles.v[p](d) = 0.0; // Kill velocity to halt energy accumulation
+                } else if (particles.x[p](d) > particle_boundary_max(d)) {
+                    particles.x[p](d) = particle_boundary_max(d);
+                    particles.v[p](d) = 0.0;
+                }
+            }
+        }
     } // end loop over particles
 }

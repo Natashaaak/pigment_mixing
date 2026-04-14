@@ -5,7 +5,7 @@
 #include "../objects/object_vdb.hpp"
 #include "../objects/object_spatula.hpp"
 
-std::string g_spatula_anim_path = "../matter/levelsets/spatula_motion_squish.bin";
+std::string g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
 
 void Simulation::initializeBasic(std::string name){
     std::cout << "-----------------------------------------------------------------------------------" << std::endl;
@@ -33,8 +33,8 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     end_frame = 20;     // last frame to simulate
     fps = fps_value;    // frames per second
     n_threads = 8;      // number of threads in parallel
-    cfl = 0.5;          // CFL constant, typically around 0.5
-    flip_ratio = -0.95; // (A)PIC-(A)FLIP ratio in [-1,1].
+    cfl = 0.2;          // CFL constant, typically around 0.5
+    flip_ratio = -0.9; // (A)PIC-(A)FLIP ratio in [-1,1].
 
     // pbc = true;
 
@@ -59,6 +59,12 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
         Lz = 0.3;
     #endif
 
+    // Restrict runaway particles
+    use_particle_boundaries = true;
+    particle_boundary_min = -2.0 * TV::Ones(); 
+    particle_boundary_max =  2.0 * TV::Ones();
+
+    // TEMP
     ObjectVdb blob_left("../matter/levelsets/Blob_left.vdb");
     ObjectVdb blob_rigt("../matter/levelsets/Blob_right.vdb");
     blob_left.scale = 0.3; blob_rigt.scale = 0.3;
@@ -68,12 +74,26 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     sampleParticlesFromVdb(*this, vdb_objects, colors, 0.01f);
 
     grid_reference_point = TV::Zero();
+    // TEMP
+
+    // TEST
+    // ObjectVdb blob_01("../matter/levelsets/blobs/Blob_01.vdb", BC::NoSlip, 0.0, TV(-3.0,0,0));
+    // ObjectVdb blob_03("../matter/levelsets/blobs/Blob_03.vdb", BC::NoSlip, 0.0, TV(-2.0,0,0));
+    // ObjectVdb blob_05("../matter/levelsets/blobs/Blob_05.vdb", BC::NoSlip, 0.0, TV(-1.0,0,0));
+    // ObjectVdb blob_07("../matter/levelsets/blobs/Blob_07.vdb", BC::NoSlip, 0.0, TV(0.0,0,0));
+    // ObjectVdb blob_09("../matter/levelsets/blobs/Blob_09.vdb", BC::NoSlip, 0.0, TV(1.0,0,0));
+    // ObjectVdb blob_11("../matter/levelsets/blobs/Blob_11.vdb", BC::NoSlip, 0.0, TV(2.0,0,0));
+    // // small.test(big, 0.5f);
+    // std::vector<ObjectVdb*> vdb_objects_blobs = {&blob_01, &blob_03, &blob_05, &blob_07, &blob_09, &blob_11};
+    // std::vector<uint8_t> colors = {0, 0, 0, 0, 0, 0};
+    // sampleParticlesFromVdb(*this, vdb_objects_blobs, colors, 0.01f);
+
 
     ////// FLOOR OBJECTS
     plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::NoSlip)); 
 
     ////// SPATULA
-    auto spatula = std::make_unique<ObjectSpatula>(BC::NoSlip, 0.3, "hehe", g_spatula_anim_path);
+    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.3, "hehe", g_spatula_anim_path);
     spatula_ptr = spatula.get();
     objects.push_back(std::move(spatula));
 
@@ -85,13 +105,13 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     use_pradhana = true; // Supress unwanted volume expansion in Drucker-Prager models
     q_prefac = 1.0 / std::sqrt(2.0); // [default: sqrt(1/2)] Prefactor in def. of q, here q = sqrt(1/2 * s:s)
 
-    M = std::tan(10*M_PI/180.0); // Internal friction (lowered for a paste-like behavior)
-    q_cohesion = 1220; // Yield surface's intercection of q-axis (in Pa) - HIGH cohesion to hold shape
+    M = std::tan(5*M_PI/180.0); // Internal friction (lowered for a paste-like behavior)
+    q_cohesion = 800; // Yield surface's intercection of q-axis (in Pa) - HIGH cohesion to hold shape
         // static cohesion is 1220, dynamic 146
-    perzyna_exp = 2.02; // Exponent in Perzyna models 
+    perzyna_exp = 1.0; // Exponent in Perzyna models 
         // can be changed to 1 or 2 or 3
     // perzyna_visc = 0.208154907; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
-    perzyna_visc = 1; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
+    perzyna_visc = 0.2; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
         // can be between 0.1 - 1
 }
 
@@ -146,6 +166,9 @@ void Simulation::prepareSimulation(){
     d_prefac = 1 / q_prefac;
     e_mu_prefac = 2*q_prefac            * mu;
     f_mu_prefac = 2*q_prefac * q_prefac * mu;
+
+    use_mibf = true;
+    use_musl = true;
 
     fac_Q = I_ref / (grain_diameter*std::sqrt(rho_s));
 
@@ -202,7 +225,7 @@ void Simulation::step(){
     T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
     std::cout << "Frame: "               << frame              << std::endl;
     std::cout << "               Time: " << time   << " -> "   << (frame+1)*frame_dt << std::endl;
-    std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step"
+    std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step";
     
     // debug("Runtime P2G     = ", (runtime_p2g     * 1000.0) / steps, " milliseconds");
     // debug("Runtime G2P     = ", (runtime_g2p     * 1000.0) / steps, " milliseconds");

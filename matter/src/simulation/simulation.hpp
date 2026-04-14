@@ -47,10 +47,13 @@ public:
   bool save_grid = false;
   bool use_mibf = false;
   bool use_musl = false;
-  bool render_fast_particles_only = false;
 
   TV grid_reference_point = 2e10 * TV::Ones();
   TV gravity = TV::Zero();
+
+  bool use_particle_boundaries = false;
+  TV particle_boundary_min = -10.0 * TV::Ones();
+  TV particle_boundary_max =  10.0 * TV::Ones();
 
   T min_dt = 1e-14; // minimum dt, also used to check  end of frame, use with caution
   T fps = 1; // frames per second
@@ -166,8 +169,6 @@ public:
 
   std::pair<std::vector<T>, std::vector<T>> getGridBoundaries() const;
   ObjectSpatula* getSpatulaObject() const { return spatula_ptr; };
-  
-  bool isParticleFast(unsigned int p) const { return particles.v[p].squaredNorm() >= (E / rho); }
 
   private:
 

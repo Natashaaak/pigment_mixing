@@ -178,7 +178,6 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("maxLevel", state.aa[state.currRes]);
     shader->setUniform("isAni", state.isAni);
     shader->setUniform("palette", mpm->getColors());
-    shader->setUniform("render_fast_particles_only", render_fast_particles_only);
 
     // Bind spatula uniforms
     shader->setUniform("invSpatulaTransform", mpm->getSpatulaInvTransform());
