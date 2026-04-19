@@ -34,13 +34,13 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     fps = fps_value;    // frames per second
     n_threads = 8;      // number of threads in parallel
     cfl = 0.2;          // CFL constant, typically around 0.5
-    flip_ratio = -0.9; // (A)PIC-(A)FLIP ratio in [-1,1].
+    flip_ratio = -0.8; // (A)PIC-(A)FLIP ratio in [-1,1].
 
     // pbc = true;
 
     // INITILIZE ELASTICITY
     elastic_model = ElasticModel::Hencky;
-    E = 1e6;     // Young's modulus (Pa)
+    E = 5e5;     // Young's modulus (Pa)
     nu = 0.3;   // Poisson's ratio (-)
     rho = 1000; // Density (kg/m3)
 
@@ -65,9 +65,9 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     particle_boundary_max =  2.0 * TV::Ones();
 
     // TEMP
-    ObjectVdb blob_left("../matter/levelsets/Blob_left.vdb");
-    ObjectVdb blob_rigt("../matter/levelsets/Blob_right.vdb");
-    blob_left.scale = 0.3; blob_rigt.scale = 0.3;
+    ObjectVdb blob_left("../matter/levelsets/Blob_left_rotated.vdb");
+    ObjectVdb blob_rigt("../matter/levelsets/Blob_right_rotated.vdb");
+    blob_left.scale = 0.2; blob_rigt.scale = 0.2;
     std::vector<ObjectVdb*> vdb_objects = {&blob_left, &blob_rigt};
     std::vector<uint8_t> colors = {0, 1};
 
@@ -93,7 +93,7 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::NoSlip)); 
 
     ////// SPATULA
-    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.3, "hehe", g_spatula_anim_path);
+    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.1, "hehe", g_spatula_anim_path);
     spatula_ptr = spatula.get();
     objects.push_back(std::move(spatula));
 
@@ -106,12 +106,12 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     q_prefac = 1.0 / std::sqrt(2.0); // [default: sqrt(1/2)] Prefactor in def. of q, here q = sqrt(1/2 * s:s)
 
     M = std::tan(5*M_PI/180.0); // Internal friction (lowered for a paste-like behavior)
-    q_cohesion = 800; // Yield surface's intercection of q-axis (in Pa) - HIGH cohesion to hold shape
+    q_cohesion = 500; // Yield surface's intercection of q-axis (in Pa) - HIGH cohesion to hold shape
         // static cohesion is 1220, dynamic 146
     perzyna_exp = 1.0; // Exponent in Perzyna models 
         // can be changed to 1 or 2 or 3
     // perzyna_visc = 0.208154907; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
-    perzyna_visc = 0.2; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
+    perzyna_visc = 0.1; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
         // can be between 0.1 - 1
 }
 

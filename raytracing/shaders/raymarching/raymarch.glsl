@@ -132,7 +132,7 @@ uint variance = 0;
 float sdSpatula(vec3 p) {
     // Půl-rozměry lichoběžníku
     float b1 = spatulaDim.x;       // Spodní šířka
-    float b2 = spatulaDim.x * 0.6; // Horní šířka
+    float b2 = spatulaDim.x * 0.25; // Horní šířka
     float he = spatulaDim.z;       // Polovina výšky (Z)
 
     // 1. Přesný 2D SDF lichoběžníku (Centrovaný kolem Z=0)
@@ -146,7 +146,7 @@ float sdSpatula(vec3 p) {
     float d_2d = s * sqrt(min(dot(ca, ca), dot(cb, cb)));
 
     // 2. Korektní 3D extruze (Tloušťka v ose Y) pro sphere tracing
-    float d_y = abs(p.y) - spatulaDim.y;
+    float d_y = abs(p.y) - spatulaDim.y / 10;
     vec2 w = vec2(d_2d, d_y);
     return min(max(w.x, w.y), 0.0) + length(max(w, 0.0));
 }
@@ -160,14 +160,10 @@ bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
     vec3 dir_local = direction / dir_len;
 
     // 1. Slab test pro Bounding Box (urychlení)
-    vec3 invDir = 1.0 / (dir_local + sign(dir_local) * 1e-9); 
-    // Přidáme malý padding (0.005), abychom nezačali raymarch až za tenkou stěnou
-    vec3 padding = vec3(0.005);
-    vec3 bbMin = vec3(-spatulaDim.x, -spatulaDim.y, -spatulaDim.z) - padding;
-    vec3 bbMax = vec3( spatulaDim.x,  spatulaDim.y,  spatulaDim.z) + padding;
-    vec3 paddingT = vec3(0.05); // 5 cm rezerva
-    vec3 t0 = (-spatulaDim - paddingT - origin) * invDir;
-    vec3 t1 = (spatulaDim + paddingT - origin) * invDir;
+    vec3 invDir = 1.0 / (dir_local + sign(dir_local) * 1e-9);
+    vec3 paddingT = vec3(0.05); // 5 cm reserve
+    vec3 t0 = (-spatulaDim - paddingT - origin) * invDir; // Lower bound of the box
+    vec3 t1 = ( spatulaDim + paddingT - origin) * invDir; // Upper bound of the box
     vec3 tMin = min(t0, t1);
     vec3 tMax = max(t0, t1);
     

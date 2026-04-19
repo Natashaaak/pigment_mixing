@@ -17,11 +17,9 @@ public:
         transform.setIdentity();
         invTransform.setIdentity();
 
-        // halfWidth = 0.15; // 15 cm
-        // halfLength = 0.1; // 10 cm
-        halfWidth = 0.25; // 55 cm
-        halfLength = 0.4; // 50 cm
-        halfThickness = 0.05; // 1 mm
+        halfWidth = 0.2; // 20 cm
+        halfLength = 0.5; // 50 cm
+        halfThickness = 0.05; // 5 cm
 
         animation_path = anim_path;
         loadAnimation(animation_path);
@@ -41,7 +39,7 @@ public:
     T sdSpatula(const Eigen::Vector3f& p) const {
         // Půl-rozměry lichoběžníku
         float b1 = (float)halfWidth;       // Spodní šířka
-        float b2 = (float)halfWidth * 0.6f; // Horní šířka
+        float b2 = (float)halfWidth * 0.25f; // Horní šířka
         float he = (float)halfLength;       // Polovina výšky (Z)
 
         // 1. Přesný 2D SDF lichoběžníku (Centrovaný kolem Z=0)
@@ -155,19 +153,27 @@ public:
         // Předpokládáme, že si ve třídě držíš proměnnou 'currentTime', kterou inkrementuješ
         currentTime += dt;
 
-        float floatIndex = (float)currentTime * 60.0f; // 60 FPS export
-        int i0 = static_cast<int>(std::floor(floatIndex));
-        int i1 = i0 + 1;
-
-        // Kontrola mezí animace
-        if (i1 >= animation_data.size()) {
-            // Zastavit na konci nebo smyčkovat (zde zastavíme)
-            vx_object = vy_object = vz_object = 0;
+        if (animation_data.empty()) {
+            vx_object = 0;
+            vy_object = 0;
+            #ifdef THREEDIM
+            vz_object = 0;
             angularVelocity = TV::Zero();
+            #else
+            angularVelocity2D = 0;
+            #endif
             return;
         }
 
-        float t = floatIndex - (float)i0;
+        float floatIndex = (float)currentTime * animation_fps; // 60 FPS export
+        int i0_unwrapped = static_cast<int>(std::floor(floatIndex));
+
+        // Loop the animation
+        const int num_frames = animation_data.size();
+        int i0 = i0_unwrapped % num_frames;
+        int i1 = (i0_unwrapped + 1) % num_frames;
+
+        float t = floatIndex - (float)i0_unwrapped;
 
         // 2. Načtení sousedních transformací
         const auto& f0 = animation_data[i0];

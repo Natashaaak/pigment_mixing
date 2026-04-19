@@ -258,14 +258,15 @@ void guiStart(bool &start, std::string &load) {
     static int spatula_anim_idx = 0;
     ImGui::PushItemWidth(bw);
     ImGui::Text("Spatula Animation:");
-    ImGui::Combo("##SpatulaAnim", &spatula_anim_idx, "Squish\0Sweep\0Inf\0\0");
+    ImGui::Combo("##SpatulaAnim", &spatula_anim_idx, "Squish\0Sweep\0Mixing\0Inf\0\0");
     ImGui::PopItemWidth();
     ImGui::Dummy(ImVec2(0, 10));
 
     if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
         if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
         else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/animations/spatula_motion_sweep.bin";
-        else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/animations/spatula_motion_inf.bin";
+        else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/animations/spatula_motion_mixing.bin";
+        else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_inf.bin";
 
         load = std::string(EXTERNAL_DATA_PATH) + "/Scenes/DamBreakModel.json";
         start = true;
