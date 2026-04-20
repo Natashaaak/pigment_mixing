@@ -85,9 +85,9 @@ void sampleParticlesFromVdb(S& sim, ObjectVdb& obj, T kRadius, T ppc = 6)
 
 template <typename S>
 #ifdef THREEDIM
-void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, std::vector<uint8_t>& colors, T kRadius, T ppc = 8)
+void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std::vector<Eigen::Vector4f>& pigments, T kRadius, T ppc = 8)
 #else // TWODIM
-void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, std::vector<uint8_t>& colors, T kRadius, T ppc = 6)
+void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std::vector<Eigen::Vector4f>& pigments, T kRadius, T ppc = 6)
 #endif
 {
     debug("Sampling particles from multiple VDB objects...");
@@ -95,7 +95,7 @@ void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, std::vecto
     std::uint32_t kAttempts = 30;
     std::uint32_t kSeed = 42;
     std::vector<TV> all_final_samples;
-    std::vector<uint8_t> all_final_colors;
+    std::vector<Eigen::Vector4f> all_final_pigments;
     
     // Total volume/area accumulator for dx calculation
     T total_volume = 0;
@@ -132,9 +132,9 @@ void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, std::vecto
             }
         }
 
-        // Assign colors for this object's samples
-        debug("    Object ", i, ": ", square_samples.size(), " square samples, ", all_final_samples.size() - all_final_colors.size(), colors[i % colors.size()]);
-        all_final_colors.insert(all_final_colors.end(), all_final_samples.size() - all_final_colors.size(), colors[i % colors.size()]);
+        // Assign pigments for this object's samples
+        debug("    Object ", i, ": ", square_samples.size(), " square samples, ", all_final_samples.size() - all_final_pigments.size(), pigments[i % pigments.size()]);
+        all_final_pigments.insert(all_final_pigments.end(), all_final_samples.size() - all_final_pigments.size(), pigments[i % pigments.size()]);
     }
 
     // --- Physical properties calculation based on global stats ---
@@ -152,7 +152,7 @@ void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, std::vecto
     sim.particle_mass = sim.rho * sim.particle_volume;
     sim.particles = Particles(sim.Np);
     sim.particles.x = all_final_samples;
-    sim.particles.color = all_final_colors;
+    sim.particles.pigments = all_final_pigments;
 
     debug("  Total particles sampled: ", sim.Np);
     debug("  Final dx: ", sim.dx);

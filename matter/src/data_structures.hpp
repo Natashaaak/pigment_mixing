@@ -4,6 +4,7 @@
 #define DATA_STRUCTURES_HPP
 
 #include "tools.hpp"
+#include <array>
 
 class Particles{
 public:
@@ -22,7 +23,8 @@ public:
 
       F.resize(Np); std::fill( F.begin(), F.end(), TM::Identity() );
       Bmat.resize(Np); std::fill( Bmat.begin(), Bmat.end(), TM::Zero() );
-      color.resize(Np); std::fill( color.begin(), color.end(), 0 );
+      pigments.resize(Np); std::fill( pigments.begin(), pigments.end(), Eigen::Vector4f::Zero() );
+      flux.resize(Np); std::fill( flux.begin(), flux.end(), std::array<TV, 4>{{TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero()}} );
   }
 
   std::vector<TV> x;
@@ -40,8 +42,10 @@ public:
   std::vector<TM> F;
   std::vector<TM> Bmat;
 
-  // indices of particle's color
-  std::vector<uint8_t> color;
+  // custom pigments base concentrations
+  std::vector<Eigen::Vector4f> pigments;
+  // flux of the pigments
+  std::vector<std::array<TV, 4>> flux;
 };
 
 class Grid{
@@ -61,6 +65,11 @@ public:
     #ifdef THREEDIM
     T zc;
     #endif
+
+    // pigments concentrations
+    std::vector<Eigen::Vector4f> pigments;
+    // divergence of flux
+    std::vector<Eigen::Vector4f> div_flux;
 };
 
 struct ParticleNeighborhood {

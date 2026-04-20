@@ -4,6 +4,7 @@
 #include <random>
 #include "../objects/object_vdb.hpp"
 #include "../objects/object_spatula.hpp"
+#include "../../deps/json.hpp"
 
 std::string g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
 
@@ -29,20 +30,65 @@ void Simulation::initializeBasic(std::string name){
 void Simulation::setupScene(const float fps_value, const std::vector<float>& colorRatios){
     openvdb::initialize();
 
+    // Read JSON configuration
+    std::ifstream config_file("../matter/pigment_config.json");
+    if (config_file.is_open()) {
+        try {
+            nlohmann::json data = nlohmann::json::parse(config_file);
+            pigment_D     = data.value("D", 0.05f);
+            pigment_D0    = data.value("D0", 0.01f);
+            pigment_alpha = data.value("alpha", 1.0f);
+            pigment_beta  = data.value("beta", 1.0f);
+            pigment_p_max = data.value("p_max", 1000.0f);
+            debug("Loaded pigment config successfully.");
+        } catch (const nlohmann::json::parse_error& e) {
+            debug("Parse error in pigment_config.json: ", e.what());
+        }
+    } else {
+        debug("Could not open pigment_config.json, using default parameters.");
+    }
+
+    // Read Simulation Configuration
+    std::ifstream sim_config_file("../matter/sim_config.json");
+    if (sim_config_file.is_open()) {
+        try {
+            nlohmann::json data = nlohmann::json::parse(sim_config_file);
+            cfl          = data.value("cfl", 0.2f);
+            flip_ratio   = data.value("flip_ratio", -0.8f);
+            E            = data.value("E", 500000.0f);
+            nu           = data.value("nu", 0.3f);
+            rho          = data.value("rho", 1000.0f);
+            T angle      = data.value("friction_angle", 5.0f);
+            M            = std::tan(angle * M_PI / 180.0);
+            q_cohesion   = data.value("q_cohesion", 500.0f);
+            perzyna_exp  = data.value("perzyna_exp", 1.0f);
+            perzyna_visc = data.value("perzyna_visc", 0.1f);
+            debug("Loaded simulation config successfully.");
+        } catch (const nlohmann::json::parse_error& e) {
+            debug("Parse error in sim_config.json: ", e.what());
+        }
+    } else {
+        debug("Could not open sim_config.json, using default parameters.");
+        cfl = 0.2;
+        flip_ratio = -0.8;
+        E = 5e5;
+        nu = 0.3;
+        rho = 1000;
+        M = std::tan(5 * M_PI / 180.0);
+        q_cohesion = 500;
+        perzyna_exp = 1.0;
+        perzyna_visc = 0.1;
+    }
+
     reduce_verbose = true;
     end_frame = 20;     // last frame to simulate
     fps = fps_value;    // frames per second
     n_threads = 8;      // number of threads in parallel
-    cfl = 0.2;          // CFL constant, typically around 0.5
-    flip_ratio = -0.8; // (A)PIC-(A)FLIP ratio in [-1,1].
 
     // pbc = true;
 
     // INITILIZE ELASTICITY
     elastic_model = ElasticModel::Hencky;
-    E = 5e5;     // Young's modulus (Pa)
-    nu = 0.3;   // Poisson's ratio (-)
-    rho = 1000; // Density (kg/m3)
 
     ////// GRAVITY ANGLE [default: gravity is 0]
     T theta_deg = 0; // angle in degrees of gravity vector
@@ -69,9 +115,12 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     ObjectVdb blob_rigt("../matter/levelsets/Blob_right_rotated.vdb");
     blob_left.scale = 0.2; blob_rigt.scale = 0.2;
     std::vector<ObjectVdb*> vdb_objects = {&blob_left, &blob_rigt};
-    std::vector<uint8_t> colors = {0, 1};
+    std::vector<Eigen::Vector4f> pigments = {
+        Eigen::Vector4f(0.0f, 0.0f, 1.0f, 0.0f), // Blob 1: Yellow (Y=1)
+        Eigen::Vector4f(1.0f, 1.0f, 0.0f, 0.0f)  // Blob 2: Blue (C=1, M=1)
+    };
 
-    sampleParticlesFromVdb(*this, vdb_objects, colors, 0.01f);
+    sampleParticlesFromVdb(*this, vdb_objects, pigments, 0.01f);
 
     grid_reference_point = TV::Zero();
     // TEMP
@@ -85,8 +134,15 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     // ObjectVdb blob_11("../matter/levelsets/blobs/Blob_11.vdb", BC::NoSlip, 0.0, TV(2.0,0,0));
     // // small.test(big, 0.5f);
     // std::vector<ObjectVdb*> vdb_objects_blobs = {&blob_01, &blob_03, &blob_05, &blob_07, &blob_09, &blob_11};
-    // std::vector<uint8_t> colors = {0, 0, 0, 0, 0, 0};
-    // sampleParticlesFromVdb(*this, vdb_objects_blobs, colors, 0.01f);
+    // std::vector<Eigen::Vector4f> pigments_blobs = {
+    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
+    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
+    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
+    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
+    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
+    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f)
+    // };
+    // sampleParticlesFromVdb(*this, vdb_objects_blobs, pigments_blobs, 0.01f);
 
 
     ////// FLOOR OBJECTS
@@ -104,15 +160,6 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
 
     use_pradhana = true; // Supress unwanted volume expansion in Drucker-Prager models
     q_prefac = 1.0 / std::sqrt(2.0); // [default: sqrt(1/2)] Prefactor in def. of q, here q = sqrt(1/2 * s:s)
-
-    M = std::tan(5*M_PI/180.0); // Internal friction (lowered for a paste-like behavior)
-    q_cohesion = 500; // Yield surface's intercection of q-axis (in Pa) - HIGH cohesion to hold shape
-        // static cohesion is 1220, dynamic 146
-    perzyna_exp = 1.0; // Exponent in Perzyna models 
-        // can be changed to 1 or 2 or 3
-    // perzyna_visc = 0.208154907; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
-    perzyna_visc = 0.1; // Viscous time parameter - >0 makes it flow like a thick viscous fluid when yielded
-        // can be between 0.1 - 1
 }
 
 void Simulation::prepareSimulation(){

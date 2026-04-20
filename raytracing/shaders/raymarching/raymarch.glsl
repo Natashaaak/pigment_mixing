@@ -62,6 +62,10 @@ layout(std430, binding = 7) buffer Determinants {
     float dets[];
 };
 
+layout(std430, binding = 8) buffer PigmentsBuf {
+    vec4 pigmentsData[];
+};
+
 ///Image width
 uniform int width;
 ///Image height
@@ -122,7 +126,6 @@ float spiky = -45.0f/pi; //first derivative of spiky
 const int MAX_INT = 2147483647;
 const vec3 lightDirView = normalize(vec3(1.0f, -1.0f, -1.0f));
 
-uniform vec3 palette[3];
 const vec3 spatula_color = vec3(1.0f, 0.0f, 0.0f);
 const vec4 floorCol = vec4(0.375f, 0.35f, 0.325f, 1.0f);
 ivec3 cS4 = ivec3(3);
@@ -326,6 +329,7 @@ void updateTCurr(inout State state, in Ray ray){
 float computeDensity(vec3 pos, out vec3 outColor){
     float density = 0.0f;
     outColor = vec3(0.0f);
+    vec4 accumulated_pigment = vec4(0.0f);
     ivec3 cell = ivec3(floor((pos - gridStart) / voxelSize));
     for(int x = -1; x < 2; x++){
         for(int y = -1; y < 2; y++){
@@ -363,15 +367,16 @@ float computeDensity(vec3 pos, out vec3 outColor){
                     w *= poly6 * hr2 * hr2 * hr2;
                     density += w;
 
-                    // Mix colors based on density weight
-                    uint c_idx = clamp(uint(sphere.w), 0u, 2u);
-                    outColor += palette[c_idx] * w;
+                    accumulated_pigment += pigmentsData[sphereID] * w;
                 }
             }
         }
     }
-    if(density > 0.0f)
-        outColor /= density; // Normalize color by total density
+    if(density > 0.0f) {
+        vec4 blended_pigment = accumulated_pigment / density;
+        vec3 rgb = vec3(1.0 - blended_pigment.x, 1.0 - blended_pigment.y, 1.0 - blended_pigment.z);
+        outColor = clamp(rgb + blended_pigment.w, 0.0, 1.0);
+    }
     return density;
 }
 ///Computes object normal using spiky kern

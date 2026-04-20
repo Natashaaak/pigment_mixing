@@ -27,6 +27,7 @@ bin/
 .DS_Store
 
 *:Zone.Identifier
+*.obj
 
 # CMake cache
 CMakeCache.txt

@@ -116,6 +116,13 @@ public:
   // Prefactor for q in plasticity models
   T q_prefac  = 1.0 / std::sqrt(2.0); // q = factor * ||dev(tau)||
 
+  // Pigment Diffusion Parameters
+  T pigment_D = 0.05;
+  T pigment_D0 = 0.01;
+  T pigment_alpha = 1.0;
+  T pigment_beta = 1.0;
+  T pigment_p_max = 1000.0;
+
   // Objects
   std::vector<std::unique_ptr<ObjectPlate>> plates;
   std::vector<std::unique_ptr<ObjectGeneral>> objects;

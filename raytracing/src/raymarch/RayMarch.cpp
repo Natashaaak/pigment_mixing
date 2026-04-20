@@ -4,6 +4,7 @@
 
 RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     glGenBuffers(1, &spheresSSBO);
+    glGenBuffers(1, &pigmentsSSBO);
     depthMaps = new DepthProcessor();
     this->a = a;
     bdg = new BinaryDensityGrid(a, mpm);
@@ -19,6 +20,7 @@ RayMarch::~RayMarch() {
     delete texShader;
     delete interpolation;
     glDeleteBuffers(1, &spheresSSBO);
+    glDeleteBuffers(1, &pigmentsSSBO);
     glDeleteTextures(1, &outputTex);
     glDeleteTextures(1, &normalDepthTex);
     glDeleteBuffers(1, &quadVBO);
@@ -112,6 +114,15 @@ void RayMarch::bindSpheres(MPMIntegrationSim *mpm) {
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
         mpm->getParticleAmount() * sizeof(glm::vec4), mpm->getParticles().data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start, spheresSSBO);
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, pigmentsSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER,
+        mpm->getParticleAmount() * sizeof(glm::vec4),
+        nullptr,
+        GL_STREAM_DRAW);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
+        mpm->getParticleAmount() * sizeof(glm::vec4), mpm->getPigments().data());
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start + 8, pigmentsSSBO);
 }
 
 void RayMarch::renderTex() {
@@ -177,7 +188,6 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("debugMode", state.debugMode);
     shader->setUniform("maxLevel", state.aa[state.currRes]);
     shader->setUniform("isAni", state.isAni);
-    shader->setUniform("palette", mpm->getColors());
 
     // Bind spatula uniforms
     shader->setUniform("invSpatulaTransform", mpm->getSpatulaInvTransform());

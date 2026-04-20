@@ -12,11 +12,6 @@ MPMIntegrationSim::~MPMIntegrationSim(){
 }
 
 void MPMIntegrationSim::setupScene(){
-    // temp setting colors
-    colors.push_back(glm::vec3(1.0f, 1.0f, 0.0f));
-    colors.push_back(glm::vec3(0.0f, 0.0f, 1.0f));
-    colors.push_back(glm::vec3(0.0f, 1.0f, 0.0f));
-
     ratios.push_back(1.0f/3.0f);
     ratios.push_back(2.0f/3.0f);
 
@@ -25,6 +20,7 @@ void MPMIntegrationSim::setupScene(){
     sim->setupScene(fps, ratios);
     sim->prepareSimulation();
     particles.resize(getParticleAmount());
+    pigments.resize(getParticleAmount());
 }
 
 void MPMIntegrationSim::simStep(){
@@ -44,15 +40,16 @@ float MPMIntegrationSim::getSupportRadius() {
 }
 
 std::vector<glm::vec4> &MPMIntegrationSim::recountParticles() {
-    Particles &particles = sim->particles;
+    Particles &sim_particles = sim->particles;
     for (unsigned int i = 0; i < sim->Np; i++) {
-        // store position in .xyz and color index in .w
+        // store position in .xyz
         if (sim->dim == 3) {
-            this->particles[i] = glm::vec4(particles.x[i](0), particles.x[i](1), particles.x[i](2), static_cast<float>(particles.color[i]));
+            this->particles[i] = glm::vec4(sim_particles.x[i](0), sim_particles.x[i](1), sim_particles.x[i](2), 1.0f);
         } else {
             // make z coordinate random
-            this->particles[i] = glm::vec4(particles.x[i](0), particles.x[i](1), 0.0f, static_cast<float>(particles.color[i]));
+            this->particles[i] = glm::vec4(sim_particles.x[i](0), sim_particles.x[i](1), 0.0f, 1.0f);
         }
+        this->pigments[i] = glm::vec4(sim_particles.pigments[i](0), sim_particles.pigments[i](1), sim_particles.pigments[i](2), sim_particles.pigments[i](3));
     }
 
     return this->particles;
@@ -63,8 +60,8 @@ std::vector<glm::vec4> &MPMIntegrationSim::getParticles() {
     return particles;
 }
 
-const std::vector<glm::vec3> &MPMIntegrationSim::getColors() {
-    return colors;
+std::vector<glm::vec4>& MPMIntegrationSim::getPigments() {
+    return pigments;
 }
 
 unsigned MPMIntegrationSim::getParticleAmount() {

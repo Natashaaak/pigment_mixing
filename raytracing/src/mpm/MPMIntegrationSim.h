@@ -46,7 +46,7 @@ public:
      */
     std::vector<glm::vec4>& getParticles();
 
-    const std::vector<glm::vec3> &getColors();
+    std::vector<glm::vec4>& getPigments();
 
     /**
      * Recounts current positions of all particles after each simulation step
@@ -74,7 +74,7 @@ private:
     Simulation* sim;
     
     std::vector<glm::vec4> particles;
-    std::vector<glm::vec3> colors;
+    std::vector<glm::vec4> pigments;
     // colors ratio (cdf), first one is ommited bcs always = 0
     std::vector<float> ratios;
 
