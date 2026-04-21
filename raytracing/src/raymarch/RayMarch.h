@@ -14,7 +14,6 @@
 #include "BinaryDensityGrid.h"
 #include "DepthProcessor.h"
 
-
 class RayMarch {
 public:
     RayMarch(MPMIntegrationSim *mpm, AABBc *a);

@@ -6,6 +6,10 @@
 class BinaryDensityGrid;
 class AABBc;
 
+extern int g_num_colors;
+extern float g_colors[4][3];
+extern float g_ratios[4];
+
 class MPMIntegrationSim {
 public:
     MPMIntegrationSim();
@@ -46,7 +50,7 @@ public:
      */
     std::vector<glm::vec4>& getParticles();
 
-    std::vector<glm::vec4>& getPigments();
+    std::vector<std::array<float, 8>>& getPigments();
 
     /**
      * Recounts current positions of all particles after each simulation step
@@ -74,7 +78,7 @@ private:
     Simulation* sim;
     
     std::vector<glm::vec4> particles;
-    std::vector<glm::vec4> pigments;
+    std::vector<std::array<float, 8>> pigments;
     // colors ratio (cdf), first one is ommited bcs always = 0
     std::vector<float> ratios;
 

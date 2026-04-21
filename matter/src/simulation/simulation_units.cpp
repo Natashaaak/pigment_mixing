@@ -27,7 +27,7 @@ void Simulation::initializeBasic(std::string name){
     is_initialized = true;
 }
 
-void Simulation::setupScene(const float fps_value, const std::vector<float>& colorRatios){
+void Simulation::setupScene(const float fps_value, const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments){
     openvdb::initialize();
 
     // Read JSON configuration
@@ -111,14 +111,11 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     particle_boundary_max =  2.0 * TV::Ones();
 
     // TEMP
-    ObjectVdb blob_left("../matter/levelsets/Blob_left_rotated.vdb");
+    ObjectVdb blob_left("../matter/levelsets/Blob_left_rotated.vdb", BC::NoSlip, 0.0, TV(-0.5,0,0));
     ObjectVdb blob_rigt("../matter/levelsets/Blob_right_rotated.vdb");
     blob_left.scale = 0.2; blob_rigt.scale = 0.2;
     std::vector<ObjectVdb*> vdb_objects = {&blob_left, &blob_rigt};
-    std::vector<Eigen::Vector4f> pigments = {
-        Eigen::Vector4f(0.0f, 0.0f, 1.0f, 0.0f), // Blob 1: Yellow (Y=1)
-        Eigen::Vector4f(1.0f, 1.0f, 0.0f, 0.0f)  // Blob 2: Blue (C=1, M=1)
-    };
+    
 
     sampleParticlesFromVdb(*this, vdb_objects, pigments, 0.01f);
 

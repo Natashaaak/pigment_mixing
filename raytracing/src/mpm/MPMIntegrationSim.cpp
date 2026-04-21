@@ -2,6 +2,7 @@
 #include "../raymarch/BinaryDensityGrid.h"
 #include "../raymarch/AABBc.h"
 #include <algorithm>
+#include "mixbox.h"
 
 MPMIntegrationSim::MPMIntegrationSim(){
     sim = new Simulation();
@@ -12,12 +13,36 @@ MPMIntegrationSim::~MPMIntegrationSim(){
 }
 
 void MPMIntegrationSim::setupScene(){
-    ratios.push_back(1.0f/3.0f);
-    ratios.push_back(2.0f/3.0f);
+    ratios.clear();
+    std::vector<Eigen::Matrix<float, 7, 1>> initial_pigments;
+    
+    float total_ratio = 0.0f;
+    for (int i = 0; i < g_num_colors; ++i) {
+        total_ratio += g_ratios[i];
+    }
+
+    float accum = 0.0f;
+    for (int i = 0; i < g_num_colors; ++i) {
+        accum += g_ratios[i] / total_ratio;
+        ratios.push_back(accum);
+
+        Eigen::Matrix<float, 7, 1> p = Eigen::Matrix<float, 7, 1>::Zero();
+        mixbox_srgb32f_to_latent(g_colors[i][0], g_colors[i][1], g_colors[i][2], p.data());
+        initial_pigments.push_back(p);
+
+        // print the rgb colors and latent pigments for debugging
+        std::cout << "Color " << i << ": RGB(" << g_colors[i][0] << ", " << g_colors[i][1] << ", " << g_colors[i][2] << ") -> Latent(";
+        for (int c = 0; c < 7; ++c) {
+            std::cout << p(c);
+            if (c < 6) std::cout << ", ";   
+        }
+        std::cout << ")" << std::endl;
+
+    }
 
     float fps = 30;
     sim->initializeBasic("mpm_integration_test");
-    sim->setupScene(fps, ratios);
+    sim->setupScene(fps, ratios, initial_pigments);
     sim->prepareSimulation();
     particles.resize(getParticleAmount());
     pigments.resize(getParticleAmount());
@@ -49,7 +74,9 @@ std::vector<glm::vec4> &MPMIntegrationSim::recountParticles() {
             // make z coordinate random
             this->particles[i] = glm::vec4(sim_particles.x[i](0), sim_particles.x[i](1), 0.0f, 1.0f);
         }
-        this->pigments[i] = glm::vec4(sim_particles.pigments[i](0), sim_particles.pigments[i](1), sim_particles.pigments[i](2), sim_particles.pigments[i](3));
+        for (int c = 0; c < 7; ++c)
+            this->pigments[i][c] = sim_particles.pigments[i](c);
+        this->pigments[i][7] = 0.0f;  // set the padding to 0.0
     }
 
     return this->particles;
@@ -60,7 +87,7 @@ std::vector<glm::vec4> &MPMIntegrationSim::getParticles() {
     return particles;
 }
 
-std::vector<glm::vec4>& MPMIntegrationSim::getPigments() {
+std::vector<std::array<float, 8>>& MPMIntegrationSim::getPigments() {
     return pigments;
 }
 

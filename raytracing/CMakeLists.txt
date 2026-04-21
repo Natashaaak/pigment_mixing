@@ -74,6 +74,9 @@ add_executable(GLHydroSurface
     src/raymarch/DepthProcessor.h
     src/raymarch/RayMarch.cpp
     src/raymarch/RayMarch.h
+
+    src/mixbox/mixbox.h
+    src/mixbox/mixbox.cpp
 )
 
 # --- Compiler & Linker Options ---
@@ -99,6 +102,7 @@ target_include_directories(GLHydroSurface PRIVATE
     ${OPENGL_INCLUDE_DIRS} 
     OpenMP::OpenMP_CXX 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mixbox
     ${CMAKE_CURRENT_SOURCE_DIR}/imgui                # ImGui headers [cite: 3]
     ${CMAKE_CURRENT_SOURCE_DIR}/external/glfw/include # GLFW headers
 )

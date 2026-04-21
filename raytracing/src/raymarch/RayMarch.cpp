@@ -100,7 +100,6 @@ void RayMarch::createOutputTexture() {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-
 AABBc *RayMarch::getA() const {
     return a;
 }
@@ -117,11 +116,11 @@ void RayMarch::bindSpheres(MPMIntegrationSim *mpm) {
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, pigmentsSSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER,
-        mpm->getParticleAmount() * sizeof(glm::vec4),
+        mpm->getParticleAmount() * sizeof(std::array<float, 8>),
         nullptr,
         GL_STREAM_DRAW);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
-        mpm->getParticleAmount() * sizeof(glm::vec4), mpm->getPigments().data());
+        mpm->getParticleAmount() * sizeof(std::array<float, 8>), mpm->getPigments().data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start + 8, pigmentsSSBO);
 }
 
@@ -165,6 +164,7 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     bdg->bindBuffers(start+1);
 
     depthMaps->bindDepthMaps(2, shader);
+
     shader->setUniform("width", ww);
     shader->setUniform("height", wh);
     shader->setUniform("viewAngle", camera->viewAngle);

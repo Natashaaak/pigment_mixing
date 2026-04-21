@@ -23,8 +23,8 @@ public:
 
       F.resize(Np); std::fill( F.begin(), F.end(), TM::Identity() );
       Bmat.resize(Np); std::fill( Bmat.begin(), Bmat.end(), TM::Zero() );
-      pigments.resize(Np); std::fill( pigments.begin(), pigments.end(), Eigen::Vector4f::Zero() );
-      flux.resize(Np); std::fill( flux.begin(), flux.end(), std::array<TV, 4>{{TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero()}} );
+      pigments.resize(Np); std::fill( pigments.begin(), pigments.end(), Eigen::Matrix<float, 7, 1>::Zero() );
+      flux.resize(Np); std::fill( flux.begin(), flux.end(), std::array<TV, 7>{{TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero()}} );
   }
 
   std::vector<TV> x;
@@ -43,9 +43,9 @@ public:
   std::vector<TM> Bmat;
 
   // custom pigments base concentrations
-  std::vector<Eigen::Vector4f> pigments;
+  std::vector<Eigen::Matrix<float, 7, 1>> pigments;
   // flux of the pigments
-  std::vector<std::array<TV, 4>> flux;
+  std::vector<std::array<TV, 7>> flux;
 };
 
 class Grid{
@@ -67,9 +67,9 @@ public:
     #endif
 
     // pigments concentrations
-    std::vector<Eigen::Vector4f> pigments;
+    std::vector<Eigen::Matrix<float, 7, 1>> pigments;
     // divergence of flux
-    std::vector<Eigen::Vector4f> div_flux;
+    std::vector<Eigen::Matrix<float, 7, 1>> div_flux;
 };
 
 struct ParticleNeighborhood {

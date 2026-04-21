@@ -85,9 +85,9 @@ void sampleParticlesFromVdb(S& sim, ObjectVdb& obj, T kRadius, T ppc = 6)
 
 template <typename S>
 #ifdef THREEDIM
-void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std::vector<Eigen::Vector4f>& pigments, T kRadius, T ppc = 8)
+void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments, T kRadius, T ppc = 8)
 #else // TWODIM
-void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std::vector<Eigen::Vector4f>& pigments, T kRadius, T ppc = 6)
+void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments, T kRadius, T ppc = 6)
 #endif
 {
     debug("Sampling particles from multiple VDB objects...");
@@ -95,7 +95,7 @@ void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std:
     std::uint32_t kAttempts = 30;
     std::uint32_t kSeed = 42;
     std::vector<TV> all_final_samples;
-    std::vector<Eigen::Vector4f> all_final_pigments;
+    std::vector<Eigen::Matrix<float, 7, 1>> all_final_pigments;
     
     // Total volume/area accumulator for dx calculation
     T total_volume = 0;

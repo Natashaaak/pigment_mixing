@@ -13,7 +13,7 @@ void Simulation::G2P(){
     std::fill( particles.pic.begin(),  particles.pic.end(),  TV::Zero() );
     std::fill( particles.flip.begin(), particles.flip.end(), TV::Zero() );
     std::fill( particles.Bmat.begin(), particles.Bmat.end(), TM::Zero() );
-    std::fill( particles.flux.begin(), particles.flux.end(), std::array<TV, 4>{{TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero()}} );
+    std::fill( particles.flux.begin(), particles.flux.end(), std::array<TV, 7>{{TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero()}} );
 
     #pragma omp parallel num_threads(n_threads)
     {
@@ -26,8 +26,8 @@ void Simulation::G2P(){
             TV vp    = TV::Zero();
             TV flipp = TV::Zero();
             TM Bp    = TM::Zero();
-            std::array<TV, 4> flux_p = {TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero()};
-            Eigen::Vector4f pigments_gain = Eigen::Vector4f::Zero();
+            std::array<TV, 7> flux_p = {TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero(), TV::Zero()};
+            Eigen::Matrix<float, 7, 1> pigments_gain = Eigen::Matrix<float, 7, 1>::Zero();
 
             for(int i = pn.base_index[0]; i < pn.base_index[0]+4; i++){
                 T xi = grid.x[i];
@@ -51,7 +51,7 @@ void Simulation::G2P(){
                         if (flip_ratio >= -1){ // PIC-FLIP or AFLIP
                             flipp += grid.flip[index] * weight;
                         }
-                        for (int c = 0; c < 4; ++c) {
+                        for (int c = 0; c < 7; ++c) {
                             flux_p[c] += grid.pigments[index](c) * grad;
                         }
                         pigments_gain += grid.div_flux[index] * weight;
@@ -71,7 +71,7 @@ void Simulation::G2P(){
                     if (flip_ratio >= -1){ // PIC-FLIP or AFLIP
                         flipp += grid.flip[index] * weight;
                     }
-                    for (int c = 0; c < 4; ++c) {
+                    for (int c = 0; c < 7; ++c) {
                         flux_p[c] += grid.pigments[index](c) * grad;
                     }
                     pigments_gain += grid.div_flux[index] * weight;
@@ -86,12 +86,23 @@ void Simulation::G2P(){
                 particles.flip[p] = flipp;
             }
 
-            for (int c = 0; c < 4; ++c) {
+            for (int c = 0; c < 7; ++c) {
                 particles.flux[p][c] = -pigment_D * flux_p[c];
             }
 
             particles.pigments[p] += dt * pigments_gain;
             particles.pigments[p] = particles.pigments[p].cwiseMax(0.0f).cwiseMin(1.0f);
+
+            // normalize pigments to ensure they sum to at most 1 -> DOES NOT WORK FOR MIXBOX!
+            // float current_sum = particles.pigments[p].sum();
+            // if (current_sum > 1e-6f) {
+            //     particles.pigments[p] /= current_sum;
+            // } else {
+            //     // set default pigment if the sum is too small to avoid division by zero
+            //     particles.pigments[p] = Eigen::Matrix<float, 7, 1>::Zero();
+            //     particles.pigments[p](6) = 1.0f; // e.g. neutral base
+            // }
+
         } // end loop p
 
     } // end omp paralell

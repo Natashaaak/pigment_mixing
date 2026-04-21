@@ -15,6 +15,9 @@ struct State{
     uint currLevel;
 };
 
+struct ParticlePigment{
+    float c[8]; // Padded to 8 floats to perfectly match std::array<float, 8> 32-byte alignment in C++!
+};
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
@@ -29,6 +32,31 @@ layout(binding = 3) uniform sampler2D Dall;
 layout(binding = 4) uniform sampler2D Nscreen;
 
 layout(binding = 5) uniform usampler2D VarianceTex;
+
+// mixbox coefficients, the same as in mixbox.cpp
+const float coefs[20][3] = 
+{
+  {1.0*+0.07717053,1.0*+0.02826978,1.0*+0.24832992},
+  {1.0*+0.95912302,1.0*+0.80256528,1.0*+0.03561839},
+  {1.0*+0.74683774,1.0*+0.04868586,1.0*+0.00000000},
+  {1.0*+0.99518138,1.0*+0.99978149,1.0*+0.99704802},
+  {3.0*+0.01606382,3.0*+0.27787927,3.0*+0.10838459},
+  {3.0*-0.22715650,3.0*+0.48702601,3.0*+0.35660312},
+  {3.0*+0.09019473,3.0*-0.05108290,3.0*+0.66245019},
+  {3.0*+0.26826063,3.0*+0.22364570,3.0*+0.06141500},
+  {3.0*-0.11677001,3.0*+0.45951942,3.0*+1.22955000},
+  {3.0*+0.35042682,3.0*+0.65938413,3.0*+0.94329691},
+  {3.0*+1.07202375,3.0*+0.27090076,3.0*+0.34461513},
+  {3.0*+0.92964458,3.0*+0.13855183,3.0*-0.01495765},
+  {3.0*+1.00720859,3.0*+0.85124701,3.0*+0.10922038},
+  {3.0*+0.98374897,3.0*+0.93733704,3.0*+0.39192814},
+  {3.0*+0.94225681,3.0*+0.26644346,3.0*+0.60571754},
+  {3.0*+0.99897033,3.0*+0.40864351,3.0*+0.60217887},
+  {6.0*+0.31232351,6.0*+0.34171197,6.0*-0.04972666},
+  {6.0*+0.42768261,6.0*+1.17238033,6.0*+0.10429229},
+  {6.0*+0.68054914,6.0*-0.23401393,6.0*+0.35832587},
+  {6.0*+1.00013113,6.0*+0.42592007,6.0*+0.31789917}
+};
 
 layout(std430, binding = 0) buffer spheres {
     vec4 spheresData[];
@@ -62,8 +90,8 @@ layout(std430, binding = 7) buffer Determinants {
     float dets[];
 };
 
-layout(std430, binding = 8) buffer PigmentsBuf {
-    vec4 pigmentsData[];
+layout(std430, binding = 8) buffer PigmentsBuffer {
+    ParticlePigment p_pigments[];
 };
 
 ///Image width
@@ -116,6 +144,7 @@ uniform bool isAni;
 uniform mat4 invSpatulaTransform;
 uniform bool has_spatula;
 uniform vec3 spatulaDim;
+bool use_closest_color = false;
 float r1 = 0.5;
 float r2 = 0.2;
 
@@ -131,6 +160,31 @@ const vec4 floorCol = vec4(0.375f, 0.35f, 0.325f, 1.0f);
 ivec3 cS4 = ivec3(3);
 ivec3 cS2 = ivec3(1);
 uint variance = 0;
+
+vec3 mix_latent_to_rgb( ParticlePigment pigments) {
+    float c[8] = pigments.c;
+    float c00 = c[0]*c[0];
+    float c11 = c[1]*c[1];
+    float c22 = c[2]*c[2];
+    float c33 = c[3]*c[3];
+    float c01 = c[0]*c[1];
+    float c02 = c[0]*c[2];
+
+    float weights[20] = {
+        c[0]*c00, c[1]*c11, c[2]*c22, c[3]*c33,
+        c00*c[1], c01*c[1], c00*c[2], c02*c[2], c00*c[3], c[0]*c33,
+        c11*c[2], c[1]*c22, c11*c[3], c[1]*c33, c22*c[3], c[2]*c33,
+        c01*c[2], c01*c[3], c02*c[3], c[1]*c[2]*c[3]
+    };
+
+    vec3 rgb = vec3(0.0);
+    for(int j=0; j<20; j++) {
+        rgb += weights[j] * vec3(coefs[j][0], coefs[j][1], coefs[j][2]);
+    }
+    
+    // Add bias (latent[4..6])
+    return clamp(rgb + vec3(c[4], c[5], c[6]), 0.0, 1.0);
+}
 
 float sdSpatula(vec3 p) {
     // Půl-rozměry lichoběžníku
@@ -325,11 +379,17 @@ void updateTCurr(inout State state, in Ray ray){
         }
     }
 }
+
 ///Computes density at the current point using only 27 cells around it using poly6 kern
 float computeDensity(vec3 pos, out vec3 outColor){
     float density = 0.0f;
     outColor = vec3(0.0f);
-    vec4 accumulated_pigment = vec4(0.0f);
+    
+    float min_dist = 1000000.0f;
+    uint closest_id = 0;
+    bool found_closest = false;
+    float accumulated_pigment[8] = float[](0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+
     ivec3 cell = ivec3(floor((pos - gridStart) / voxelSize));
     for(int x = -1; x < 2; x++){
         for(int y = -1; y < 2; y++){
@@ -351,6 +411,15 @@ float computeDensity(vec3 pos, out vec3 outColor){
                     vec4 sphere = spheresData[sphereID];
                     vec3 d = pos - sphere.xyz;
                     float r = length(d);
+
+                    if (use_closest_color) {
+                        if (r < min_dist) {
+                            min_dist = r;
+                            closest_id = sphereID;
+                            found_closest = true;
+                        }
+                    }
+
                     float compare = h;
                     float hr2 = h*h - r*r;
                     float w = 1.0f;
@@ -366,16 +435,24 @@ float computeDensity(vec3 pos, out vec3 outColor){
                     }
                     w *= poly6 * hr2 * hr2 * hr2;
                     density += w;
-
-                    accumulated_pigment += pigmentsData[sphereID] * w;
+                    
+                    if (!use_closest_color) {
+                        for (int c = 0; c < 8; ++c) {
+                            accumulated_pigment[c] += p_pigments[sphereID].c[c] * w;
+                        }
+                    }
                 }
             }
         }
     }
     if(density > 0.0f) {
-        vec4 blended_pigment = accumulated_pigment / density;
-        vec3 rgb = vec3(1.0 - blended_pigment.x, 1.0 - blended_pigment.y, 1.0 - blended_pigment.z);
-        outColor = clamp(rgb + blended_pigment.w, 0.0, 1.0);
+        if (use_closest_color && found_closest) {
+            outColor = mix_latent_to_rgb(p_pigments[closest_id]); // Convert latent to RGB using the mixbox coefficients
+        } else if (!use_closest_color) {
+            ParticlePigment blended_pigment;
+            for (int i = 0; i < 8; ++i) blended_pigment.c[i] = accumulated_pigment[i] / density;
+            outColor = mix_latent_to_rgb(blended_pigment);
+        }
     }
     return density;
 }

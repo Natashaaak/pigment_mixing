@@ -39,6 +39,14 @@ bool takeScreenshot = false;
 bool screenshotsTaken = false;
 
 extern std::string g_spatula_anim_path;
+int g_num_colors = 2;
+float g_colors[4][3] = {
+    {1.0f, 1.0f, 0.0f}, // Yellow
+    {0.0f, 0.0f, 1.0f}, // Blue
+    {1.0f, 0.0f, 0.0f}, // Red
+    {0.0f, 1.0f, 0.0f}  // Green
+};
+float g_ratios[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -247,9 +255,9 @@ void guiStart(bool &start, std::string &load) {
     ImGui::Begin("##MM", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 
     float bw = vp->WorkSize.x * 0.5f;
-    float bh = 120.0f;
+    float bh = 80.0f;
 
-    float totalH = (bh * 4) + (15 * 3) + 40;
+    float totalH = (bh * 2) + 160.0f + (g_num_colors * 40.0f);
 
     ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - bw) * 0.5f, (vp->WorkSize.y - totalH) * 0.5f));
 
@@ -261,6 +269,21 @@ void guiStart(bool &start, std::string &load) {
     ImGui::Combo("##SpatulaAnim", &spatula_anim_idx, "Squish\0Sweep\0Mixing\0Inf\0\0");
     ImGui::PopItemWidth();
     ImGui::Dummy(ImVec2(0, 10));
+
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0, 10));
+
+    ImGui::PushItemWidth(bw);
+    ImGui::SliderInt("Number of Colors", &g_num_colors, 2, 4);
+    for (int i = 0; i < g_num_colors; ++i) {
+        ImGui::PushID(i);
+        ImGui::ColorEdit3("##Color", g_colors[i], ImGuiColorEditFlags_NoInputs);
+        ImGui::SameLine();
+        ImGui::SliderFloat("Ratio", &g_ratios[i], 0.1f, 10.0f, "Vol Ratio: %.2f");
+        ImGui::PopID();
+    }
+    ImGui::PopItemWidth();
+    ImGui::Dummy(ImVec2(0, 20));
 
     if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
         if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";

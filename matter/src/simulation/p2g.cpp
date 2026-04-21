@@ -14,8 +14,8 @@ void Simulation::P2G(){
         std::vector<TV> grid_v_local(grid_nodes, TV::Zero() );
         std::vector<T> grid_mass_local(grid_nodes);
         std::vector<T> grid_friction_local(grid_nodes);
-        std::vector<Eigen::Vector4f> grid_pigments_local(grid_nodes, Eigen::Vector4f::Zero());
-        std::vector<Eigen::Vector4f> grid_div_flux_local(grid_nodes, Eigen::Vector4f::Zero());
+        std::vector<Eigen::Matrix<float, 7, 1>> grid_pigments_local(grid_nodes, Eigen::Matrix<float, 7, 1>::Zero());
+        std::vector<Eigen::Matrix<float, 7, 1>> grid_div_flux_local(grid_nodes, Eigen::Matrix<float, 7, 1>::Zero());
 
         #pragma omp for nowait
         for(int p = 0; p < Np; p++){
@@ -38,7 +38,7 @@ void Simulation::P2G(){
                             grid_mass_local[index]  += weight;
                             grid_v_local[index]     += particles.v[p] * weight;
                             grid_pigments_local[index] += particles.pigments[p] * weight;
-                            for (int c = 0; c < 4; ++c) {
+                            for (int c = 0; c < 7; ++c) {
                                 grid_div_flux_local[index](c) += particles.flux[p][c].dot(grad);
                             }
                             if (flip_ratio < 0){ // APIC
@@ -61,7 +61,7 @@ void Simulation::P2G(){
                         grid_mass_local[index]  += weight;
                         grid_v_local[index]     += particles.v[p] * weight;
                         grid_pigments_local[index] += particles.pigments[p] * weight;
-                        for (int c = 0; c < 4; ++c) {
+                        for (int c = 0; c < 7; ++c) {
                             grid_div_flux_local[index](c) += particles.flux[p][c].dot(grad);
                         }
                         if (flip_ratio < 0){ // APIC
@@ -103,6 +103,11 @@ void Simulation::P2G(){
             grid.v[l] /= mi;
             grid.pigments[l] /= mi;
             grid.div_flux[l] /= mi;
+
+            // Apply diffusion explicitly
+            // grid.pigments[l] += dt * grid.div_flux[l];
+            // for (int c = 0; c < 7; ++c)
+            //     grid.pigments[l](c) = std::max(0.0f, std::min(1.0f, grid.pigments[l](c)));
         } else {
             grid.v[l].setZero();
             grid.pigments[l].setZero();
