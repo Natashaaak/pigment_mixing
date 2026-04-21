@@ -14,11 +14,13 @@
 class Camera {
 public:
     /**
-     * Creates standard camera
+     * Creates standard camera, optionally using a specific position and target
+     * @param pos Initial camera position
+     * @param tgt Initial camera target
      */
-    Camera() {
-        cameraPos = glm::vec3(0.0f, 1.5f, -2.0f);
-        target = glm::vec3(0.0f, 0.0f, 0.0f);
+    Camera(glm::vec3 pos = glm::vec3(0.0f, 1.5f, -2.0f), glm::vec3 tgt = glm::vec3(0.0f, 0.0f, 0.0f)) {
+        cameraPos = pos;
+        target = tgt;
         glm::vec3 offset = cameraPos - target;
         radius = glm::length(offset);
         yaw = atan2(offset.x, offset.z);

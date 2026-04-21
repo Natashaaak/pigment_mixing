@@ -78,4 +78,10 @@ struct ParticleNeighborhood {
     TV grads[64];                // Hodnoty grad_wip
 };
 
+struct BlobModel {
+    std::string path;
+    float volume;
+    float calibration_factor; // Faktor pro převod mezi objemem a parametrem t
+};
+
 #endif // DATA_STRUCTURES_HPP

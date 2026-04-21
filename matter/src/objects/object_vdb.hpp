@@ -32,18 +32,25 @@ public:
 
     ~ObjectVdb(){}
 
-    ObjectVdb(std::string filename, BC bc_in = BC::NoSlip, T friction_in = 0.0, TV offset_in = TV::Zero(), T scale_in = 1.0, std::string name_in = "") 
-        : ObjectGeneral(bc_in, friction_in, name_in), offset(offset_in), scale(scale_in) {
-
+    static typename GridT::Ptr loadGrid(std::string filename) {
         openvdb::io::File file(filename);
         file.open();
         openvdb::GridPtrVecPtr my_grids = file.getGrids();
         file.close();
-        int count = 0;
+        typename GridT::Ptr grid;
         for (openvdb::GridPtrVec::iterator iter = my_grids->begin(); iter != my_grids->end(); ++iter) {
             grid = openvdb::gridPtrCast<GridT>(*iter);
-            count++;
         }
+        return grid;
+    }
+
+    ObjectVdb(std::string filename, BC bc_in = BC::NoSlip, T friction_in = 0.0, TV offset_in = TV::Zero(), T scale_in = 1.0, std::string name_in = "") 
+        : ObjectVdb(loadGrid(filename), bc_in, friction_in, offset_in, scale_in, name_in) {}
+
+    ObjectVdb(typename GridT::Ptr grid_in, BC bc_in = BC::NoSlip, T friction_in = 0.0, TV offset_in = TV::Zero(), T scale_in = 1.0, std::string name_in = "") 
+        : ObjectGeneral(bc_in, friction_in, name_in), offset(offset_in), scale(scale_in) {
+        
+        grid = grid_in;
 
         openvdb::tools::Gradient<GridT> mg(*grid);
         grad_phi = mg.process();
@@ -110,16 +117,15 @@ public:
         }
     }
 
-    void test(ObjectVdb& other, float blend_weight = 0.5f) const {
-        // Note: LevelSetMorphing modifies the source grid (*grid) in-place. 
-        // If you need to keep the original, make a copy using grid->deepCopy() first.
-        openvdb::tools::LevelSetMorphing<GridT> morpher(*grid, *other.grid);
+    // void test(ObjectVdb& other, float blend_weight = 0.5f) const {
+    //     // Note: LevelSetMorphing modifies the source grid (*grid) in-place. 
+    //     // If you need to keep the original, make a copy using grid->deepCopy() first.
+    //     openvdb::tools::LevelSetMorphing<GridT> morpher(*grid, *other.grid);
         
-        // Morph the grid over a time interval.
-        // 0.0 = Source shape, 1.0 = Target shape.
-        morpher.advect(0.0, blend_weight);
-    }
-
+    //     // Morph the grid over a time interval.
+    //     // 0.0 = Source shape, 1.0 = Target shape.
+    //     morpher.advect(0.0, blend_weight);
+    // }
 
 }; // End class ObjectVdb
 

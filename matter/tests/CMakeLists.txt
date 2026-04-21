@@ -31,7 +31,7 @@ if (USE_VDB)
       ../src/simulation/musl.cpp
       ../src/simulation/pbc.cpp
 			../src/simulation/precompute_weight.cpp
-
+      ../src/simulation/simulation_blobs.cpp
     )
 
 	set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
@@ -73,6 +73,7 @@ else (USE_VDB)
       ../src/simulation/musl.cpp
       ../src/simulation/pbc.cpp
       ../src/simulation/precompute_weight.cpp
+      ../src/simulation/simulation_blobs.cpp
     )
 
 	target_link_libraries (tests GTest::gtest_main

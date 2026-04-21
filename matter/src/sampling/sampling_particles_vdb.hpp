@@ -99,6 +99,7 @@ void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std:
     
     // Total volume/area accumulator for dx calculation
     T total_volume = 0;
+    size_t total_square_samples = 0;
 
     for (size_t i = 0; i < objects.size(); ++i) {
         ObjectVdb& obj = *objects[i];
@@ -119,6 +120,8 @@ void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std:
             auto square_samples = thinks::PoissonDiskSampling(kRadius, kXMin, kXMax, kAttempts, kSeed + i);
         #endif
 
+        total_square_samples += square_samples.size();
+
         // Perform inside test for this specific object
         for (const auto& s : square_samples) {
             #ifdef THREEDIM
@@ -133,7 +136,7 @@ void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std:
         }
 
         // Assign pigments for this object's samples
-        debug("    Object ", i, ": ", square_samples.size(), " square samples, ", all_final_samples.size() - all_final_pigments.size(), pigments[i % pigments.size()]);
+        debug("    Object ", i, ": ", square_samples.size(), " square samples, ", all_final_samples.size() - all_final_pigments.size(), " new particles.");
         all_final_pigments.insert(all_final_pigments.end(), all_final_samples.size() - all_final_pigments.size(), pigments[i % pigments.size()]);
     }
 
@@ -142,10 +145,10 @@ void sampleParticlesFromVdb(S& sim, std::vector<ObjectVdb*>& objects, const std:
     
     #ifdef THREEDIM
         // Adjust dx based on total samples across all objects
-        sim.dx = std::cbrt(ppc / T(sim.Np) * total_volume);
+        sim.dx = std::cbrt(ppc / T(total_square_samples) * total_volume);
         sim.particle_volume = (sim.dx * sim.dx * sim.dx) / ppc;
     #else
-        sim.dx = std::sqrt(ppc / T(sim.Np) * total_volume);
+        sim.dx = std::sqrt(ppc / T(total_square_samples) * total_volume);
         sim.particle_volume = (sim.dx * sim.dx) / ppc;
     #endif
 

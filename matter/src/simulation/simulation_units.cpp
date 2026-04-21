@@ -109,38 +109,16 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     use_particle_boundaries = true;
     particle_boundary_min = -2.0 * TV::Ones(); 
     particle_boundary_max =  2.0 * TV::Ones();
-
-    // TEMP
-    ObjectVdb blob_left("../matter/levelsets/Blob_left_rotated.vdb", BC::NoSlip, 0.0, TV(-0.5,0,0));
-    ObjectVdb blob_rigt("../matter/levelsets/Blob_right_rotated.vdb");
-    blob_left.scale = 0.2; blob_rigt.scale = 0.2;
-    std::vector<ObjectVdb*> vdb_objects = {&blob_left, &blob_rigt};
-    
-
-    sampleParticlesFromVdb(*this, vdb_objects, pigments, 0.01f);
-
+ 
     grid_reference_point = TV::Zero();
-    // TEMP
 
-    // TEST
-    // ObjectVdb blob_01("../matter/levelsets/blobs/Blob_01.vdb", BC::NoSlip, 0.0, TV(-3.0,0,0));
-    // ObjectVdb blob_03("../matter/levelsets/blobs/Blob_03.vdb", BC::NoSlip, 0.0, TV(-2.0,0,0));
-    // ObjectVdb blob_05("../matter/levelsets/blobs/Blob_05.vdb", BC::NoSlip, 0.0, TV(-1.0,0,0));
-    // ObjectVdb blob_07("../matter/levelsets/blobs/Blob_07.vdb", BC::NoSlip, 0.0, TV(0.0,0,0));
-    // ObjectVdb blob_09("../matter/levelsets/blobs/Blob_09.vdb", BC::NoSlip, 0.0, TV(1.0,0,0));
-    // ObjectVdb blob_11("../matter/levelsets/blobs/Blob_11.vdb", BC::NoSlip, 0.0, TV(2.0,0,0));
-    // // small.test(big, 0.5f);
-    // std::vector<ObjectVdb*> vdb_objects_blobs = {&blob_01, &blob_03, &blob_05, &blob_07, &blob_09, &blob_11};
-    // std::vector<Eigen::Vector4f> pigments_blobs = {
-    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
-    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
-    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
-    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
-    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f),
-    //     Eigen::Vector4f(1.0f, 0.0f, 0.0f, 0.0f)
-    // };
-    // sampleParticlesFromVdb(*this, vdb_objects_blobs, pigments_blobs, 0.01f);
+    // print color ratios
+    debug("Color Ratios:");
+    for (size_t i = 0; i < colorRatios.size(); ++i) {
+        debug("  Color ", i, ": ", colorRatios[i]);
+    } 
 
+    blobs(colorRatios, pigments);
 
     ////// FLOOR OBJECTS
     plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::NoSlip)); 

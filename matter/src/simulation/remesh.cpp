@@ -315,7 +315,7 @@ void Simulation::remeshFixedCont(){
     grid.zc = grid.z[0];
 #endif
 
-    // #ifdef WARNINGS
+    #ifdef WARNINGS
         #ifdef THREEDIM
         debug("               grid        = (", Nx, ", ", Ny, ", ", Nz, ")"  );
         #else
@@ -325,6 +325,6 @@ void Simulation::remeshFixedCont(){
         debug("               high_y      = ", high_y);
         debug("               low_y       = ", low_y);
         #endif
-    // #endif
+    #endif
 
 }

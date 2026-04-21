@@ -17,6 +17,7 @@
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "mpm/MPMIntegrationSim.h"
+#include "../../matter/deps/json.hpp"
 #include <string>
 #include <algorithm>
 #include <vector>
@@ -46,7 +47,7 @@ float g_colors[4][3] = {
     {1.0f, 0.0f, 0.0f}, // Red
     {0.0f, 1.0f, 0.0f}  // Green
 };
-float g_ratios[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float g_ratios[4] = { 0.5f, 0.5f, 0.0f, 0.0f };
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -273,13 +274,42 @@ void guiStart(bool &start, std::string &load) {
     ImGui::Separator();
     ImGui::Dummy(ImVec2(0, 10));
 
+    static int prev_num_colors = g_num_colors;
     ImGui::PushItemWidth(bw);
-    ImGui::SliderInt("Number of Colors", &g_num_colors, 2, 4);
+    
+    // Re-balance evenly if the user changes the number of active colors
+    if (ImGui::SliderInt("Number of Colors", &g_num_colors, 2, 4)) {
+        if (g_num_colors != prev_num_colors) {
+            float val = 1.0f / g_num_colors;
+            for (int i = 0; i < g_num_colors; ++i) g_ratios[i] = val;
+            prev_num_colors = g_num_colors;
+        }
+    }
+    
     for (int i = 0; i < g_num_colors; ++i) {
         ImGui::PushID(i);
         ImGui::ColorEdit3("##Color", g_colors[i], ImGuiColorEditFlags_NoInputs);
         ImGui::SameLine();
-        ImGui::SliderFloat("Ratio", &g_ratios[i], 0.1f, 10.0f, "Vol Ratio: %.2f");
+        
+        float max_ratio = 1.0f - 0.1f * (g_num_colors - 1);
+        if (ImGui::SliderFloat("Ratio", &g_ratios[i], 0.1f, max_ratio, "Vol Ratio: %.05f")) {
+            g_ratios[i] = std::max(0.1f, std::min(g_ratios[i], max_ratio)); // Ensure strict bounds on manual input
+
+            float rest_sum = 0.0f;
+            for (int j = 0; j < g_num_colors; ++j) if (i != j) rest_sum += g_ratios[j];
+            
+            float target_rest_sum = 1.0f - g_ratios[i];
+            float free_rest_sum = rest_sum - 0.1f * (g_num_colors - 1);
+            float target_free_sum = target_rest_sum - 0.1f * (g_num_colors - 1);
+
+            if (free_rest_sum > 0.0001f) { // Scale the free portions proportionally
+                float scale = target_free_sum / free_rest_sum;
+                for (int j = 0; j < g_num_colors; ++j) if (i != j) g_ratios[j] = 0.1f + (g_ratios[j] - 0.1f) * scale;
+            } else { // If the others were fully depleted, distribute the new free remainder evenly
+                float val = target_free_sum / (g_num_colors - 1);
+                for (int j = 0; j < g_num_colors; ++j) if (i != j) g_ratios[j] = 0.1f + val;
+            }
+        }
         ImGui::PopID();
     }
     ImGui::PopItemWidth();
@@ -494,6 +524,14 @@ void gui() {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
+namespace glm {
+    void from_json(const nlohmann::json& j, vec3& v) {
+        j.at(0).get_to(v.x);
+        j.at(1).get_to(v.y);
+        j.at(2).get_to(v.z);
+    }
+}
+
 int mainComputeLoop() {
     int fbW, fbH;
     glfwGetFramebufferSize(glfwGetCurrentContext(), &fbW, &fbH);
@@ -574,7 +612,32 @@ int main() {
     l->set_level(spdlog::level::trace);
     spdlog::flush_every(std::chrono::seconds(3));
     if (createWindow() != OK) return -1;
-    camera = new Camera();
+
+    glm::vec3 camera_pos(0.0f, 1.5f, -2.0f);
+    glm::vec3 camera_tgt(0.0f, 0.0f, 0.0f);
+
+    std::ifstream f("../camera_config.json");
+    if (f.is_open()) {
+        try {
+            nlohmann::json data = nlohmann::json::parse(f);
+            if (data.contains("camera")) {
+                auto& camera_data = data.at("camera");
+                if (camera_data.contains("position")) {
+                    camera_data.at("position").get_to(camera_pos);
+                }
+                if (camera_data.contains("target")) {
+                    camera_data.at("target").get_to(camera_tgt);
+                }
+            }
+            spdlog::info("Loaded camera settings from camera_config.json");
+        } catch (const nlohmann::json::exception& e) {
+            spdlog::warn("Error parsing camera_config.json: {}. Using default camera settings.", e.what());
+        }
+    } else {
+        spdlog::info("camera_config.json not found. Using default camera settings.");
+    }
+
+    camera = new Camera(camera_pos, camera_tgt);
     mainComputeLoop();
     spdlog::shutdown();
     return OK;

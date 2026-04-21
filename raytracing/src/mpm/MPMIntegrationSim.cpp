@@ -16,15 +16,8 @@ void MPMIntegrationSim::setupScene(){
     ratios.clear();
     std::vector<Eigen::Matrix<float, 7, 1>> initial_pigments;
     
-    float total_ratio = 0.0f;
     for (int i = 0; i < g_num_colors; ++i) {
-        total_ratio += g_ratios[i];
-    }
-
-    float accum = 0.0f;
-    for (int i = 0; i < g_num_colors; ++i) {
-        accum += g_ratios[i] / total_ratio;
-        ratios.push_back(accum);
+        ratios.push_back(g_ratios[i]);
 
         Eigen::Matrix<float, 7, 1> p = Eigen::Matrix<float, 7, 1>::Zero();
         mixbox_srgb32f_to_latent(g_colors[i][0], g_colors[i][1], g_colors[i][2], p.data());

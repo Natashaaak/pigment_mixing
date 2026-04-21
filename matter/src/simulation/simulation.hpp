@@ -170,9 +170,13 @@ public:
   void initializeBasic(std::string name);
   void setupScene(const float fps, const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments);
   void sampleMultipleVdbObjects(std::vector<std::string> vdb_filenames, std::vector<uint8_t> colors, T kRadius, T ppc);
+  void blobs(const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments);
   void prepareSimulation();
   void step();
   bool frameFinished();
+
+  int getMorphPair(float targetVolume);
+  float findTForExactVolume(typename ObjectVdb::GridT::Ptr gridA, typename ObjectVdb::GridT::Ptr gridB, float factorA, float factorB, float targetVolume);
 
   std::pair<std::vector<T>, std::vector<T>> getGridBoundaries() const;
   ObjectSpatula* getSpatulaObject() const { return spatula_ptr; };
@@ -260,6 +264,19 @@ public:
   T low_z;
   T high_z;
 #endif
+
+  // initial objects names and their volume
+  const std::vector<BlobModel> blobDatabase = {
+    {"../matter/levelsets/blobs/Blob_01.vdb", 0.01f, 1.1795f},
+    {"../matter/levelsets/blobs/Blob_03.vdb", 0.03f, 0.9912f},
+    {"../matter/levelsets/blobs/Blob_05.vdb", 0.05f, 1.0005f},
+    {"../matter/levelsets/blobs/Blob_07.vdb", 0.07f, 0.9933f},
+    {"../matter/levelsets/blobs/Blob_09.vdb", 0.09f, 0.9965f},
+    {"../matter/levelsets/blobs/Blob_11.vdb", 0.11f, 0.9696f}
+  };
+
+  T volume_sum = 0.12;
+
 }; // end Simulation class
 
 inline TM Simulation::NeoHookeanPiola(TM & Fe){
