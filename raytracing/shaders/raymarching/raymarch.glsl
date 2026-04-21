@@ -187,25 +187,47 @@ vec3 mix_latent_to_rgb( ParticlePigment pigments) {
 }
 
 float sdSpatula(vec3 p) {
-    // Půl-rozměry lichoběžníku
-    float b1 = spatulaDim.x;       // Spodní šířka
-    float b2 = spatulaDim.x * 0.25; // Horní šířka
-    float he = spatulaDim.z;       // Polovina výšky (Z)
+    float b1 = spatulaDim.x;           // Spodní šířka (poloměr)
+    float b2 = spatulaDim.x * 0.25;    // Horní šířka (poloměr)
+    float he = spatulaDim.z;           // Polovina výšky (Z)
+    float halfThickness = spatulaDim.y / 10.0;
 
-    // 1. Přesný 2D SDF lichoběžníku (Centrovaný kolem Z=0)
     vec2 p2d = vec2(abs(p.x), p.z);
-    vec2 k1 = vec2(b2, he);
-    vec2 k2 = vec2(b2 - b1, 2.0 * he);
-    
-    vec2 ca = vec2(p2d.x - min(p2d.x, (p2d.y < 0.0) ? b1 : b2), abs(p2d.y) - he);
-    vec2 cb = p2d - k1 + k2 * clamp(dot(k1 - p2d, k2) / dot(k2, k2), 0.0, 1.0);
-    float s = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
-    float d_2d = s * sqrt(min(dot(ca, ca), dot(cb, cb)));
 
-    // 2. Korektní 3D extruze (Tloušťka v ose Y) pro sphere tracing
-    float d_y = abs(p.y) - spatulaDim.y / 10;
-    vec2 w = vec2(d_2d, d_y);
-    return min(max(w.x, w.y), 0.0) + length(max(w, 0.0));
+    // 1. Vzdálenost k šikmé stěně (bok lichoběžníku)
+    // Definujeme úsečku od spodního rohu (b1, -he) k hornímu (b2, he)
+    vec2 p1 = vec2(b1, -he);
+    vec2 p2 = vec2(b2, he);
+    vec2 ba = p2 - p1;
+    vec2 pa = p2d - p1;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    float d_side = length(pa - ba * h); // Vzdálenost k šikmé úsečce
+
+    // 2. Definice "vnitřku" (vzdálenost k ose X=0 v lichoběžníku)
+    // Tady musíme počítat, jak daleko je bod od šikmé stěny, ale se znaménkem
+    float inside_x = b1 - (b1 - b2) * (p2d.y + he) / (2.0 * he);
+    float d_inside = p2d.x - inside_x;
+
+    // 3. Rozhodnutí (Sjednocení)
+    // Pokud jsme "uvnitř" (vlevo od šikmé stěny), vzdálenost je d_inside.
+    // Pokud jsme "vně", vzdálenost je d_side (k šikmé stěně).
+    float d_2d = (p2d.x < inside_x) ? d_inside : d_side;
+
+    // 4. Přidání půlkruhů na koncích
+    if (p2d.y > he) {
+        d_2d = length(vec2(p2d.x, p2d.y - he)) - b2;
+    } else if (p2d.y < -he) {
+        float r_x_bot = b1;
+        float r_z_bot = 1.5 * b1; // Opět protáhlost
+        vec2 p_rel = vec2(p2d.x, p2d.y + he);
+        float k0 = length(p_rel / vec2(r_x_bot, r_z_bot));
+        float k1 = length(p_rel / (vec2(r_x_bot, r_z_bot) * vec2(r_x_bot, r_z_bot)));
+        d_2d = k0 * (k0 - 1.0) / k1;
+    }
+
+    // 5. Extruze
+    float d_y = abs(p.y) - halfThickness;
+    return max(d_2d, d_y);
 }
 
 bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
@@ -219,8 +241,13 @@ bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
     // 1. Slab test pro Bounding Box (urychlení)
     vec3 invDir = 1.0 / (dir_local + sign(dir_local) * 1e-9);
     vec3 paddingT = vec3(0.05); // 5 cm reserve
-    vec3 t0 = (-spatulaDim - paddingT - origin) * invDir; // Lower bound of the box
-    vec3 t1 = ( spatulaDim + paddingT - origin) * invDir; // Upper bound of the box
+    
+    // Bounding box must encompass the top and bottom half-circles!
+    vec3 boxMin = vec3(-spatulaDim.x, -spatulaDim.y, -spatulaDim.z - 1.5 * spatulaDim.x);
+    vec3 boxMax = vec3( spatulaDim.x,  spatulaDim.y,  spatulaDim.z + spatulaDim.x * 0.25);
+    
+    vec3 t0 = (boxMin - paddingT - origin) * invDir; // Lower bound of the box
+    vec3 t1 = (boxMax + paddingT - origin) * invDir; // Upper bound of the box
     vec3 tMin = min(t0, t1);
     vec3 tMax = max(t0, t1);
     

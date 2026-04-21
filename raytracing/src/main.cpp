@@ -17,7 +17,7 @@
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "mpm/MPMIntegrationSim.h"
-#include "../../matter/deps/json.hpp"
+#include "../../deps/json.hpp"
 #include <string>
 #include <algorithm>
 #include <vector>

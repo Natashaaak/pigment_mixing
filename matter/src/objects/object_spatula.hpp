@@ -38,23 +38,49 @@ public:
     // Pomocná SDF funkce (vzdálenost k povrchu v lokálním prostoru)
     T sdSpatula(const Eigen::Vector3f& p) const {
         // Půl-rozměry lichoběžníku
+        Eigen::Vector2f p2d(std::abs(p.x()), p.z());
         float b1 = (float)halfWidth;       // Spodní šířka
         float b2 = (float)halfWidth * 0.25f; // Horní šířka
         float he = (float)halfLength;       // Polovina výšky (Z)
 
         // 1. Přesný 2D SDF lichoběžníku (Centrovaný kolem Z=0)
-        Eigen::Vector2f p2d(std::abs(p.x()), p.z());
         Eigen::Vector2f k1(b2, he);
         Eigen::Vector2f k2(b2 - b1, 2.0f * he);
         
-        Eigen::Vector2f ca(p2d.x() - std::min(p2d.x(), (p2d.y() < 0.0f) ? b1 : b2), std::abs(p2d.y()) - he);
-        
-        float dot_val = (k1 - p2d).dot(k2) / k2.dot(k2);
-        float clamped_val = std::max(0.0f, std::min(1.0f, dot_val));
-        Eigen::Vector2f cb = p2d - k1 + k2 * clamped_val;
-        
-        float s = (cb.x() < 0.0f && ca.y() < 0.0f) ? -1.0f : 1.0f;
-        float d_2d = s * std::sqrt(std::min(ca.dot(ca), cb.dot(cb)));
+        float d_2d;
+        if (p2d.y() > he) {
+            // Oblast půlkruhu: vzdálenost k bodu (0, he) minus poloměr b2
+            d_2d = std::sqrt(p2d.x() * p2d.x() + (p2d.y() - he) * (p2d.y() - he)) - b2;
+        } else if (p2d.y() < -he) {
+            // Definujeme poloměry elipsy
+            float r_x = (float)halfWidth;        // b1
+            float r_z = 0.75f * (float)halfWidth; // Tvůj požadovaný poměr 0.75 * šířka
+            
+            // Relativní souřadnice bodu vůči středu elipsy (0, -he)
+            Eigen::Vector2f p_rel(p2d.x(), p2d.y() + he);
+            
+            // Aproximace vzdálenosti k elipse
+            Eigen::Vector2f r(r_x, r_z);
+            float k0 = (p_rel.array() / r.array()).matrix().norm();
+            float k1 = (p_rel.array() / (r.array() * r.array())).matrix().norm();
+            
+            d_2d = k0 * (k0 - 1.0f) / k1;
+        } else {
+            // Zde potřebujeme spočítat vzdálenost k "nekonečnému" lichoběžníku
+            // Tedy vzdálenost k šikmým stěnám
+            Eigen::Vector2f k1(b2, he);
+            Eigen::Vector2f k2(b2 - b1, 2.0f * he);
+            
+            // Vzdálenost k šikmé stěně
+            float dot_val = (k1 - p2d).dot(k2) / k2.dot(k2);
+            float clamped_val = std::max(0.0f, std::min(1.0f, dot_val));
+            Eigen::Vector2f cb = p2d - k1 + k2 * clamped_val;
+            d_2d = (p2d.x() - b1 + (b1 - b2) * (p2d.y() + he) / (2.0f * he));
+        }
+
+        bool inside = (p2d.y() > -he && p2d.y() < he && p2d.x() < (b1 - (b1-b2)*(p2d.y()+he)/(2.0f*he)));
+        if (inside) d_2d = -std::abs(d_2d);
+        else d_2d = std::abs(d_2d);
 
         // 2. Korektní 3D extruze (Tloušťka v ose Y) pro sphere tracing
         float d_y = std::abs(p.y()) - (float)halfThickness;
