@@ -118,10 +118,10 @@ public:
 
   // Pigment Diffusion Parameters
   T pigment_D = 0.05;
-  T pigment_D0 = 0.01;
-  T pigment_alpha = 1.0;
-  T pigment_beta = 1.0;
-  T pigment_p_max = 1000.0;
+  T pigment_D_0 = 10e-5;
+  T pigment_D_max = 10e-2;
+  T pigment_D_edge0 = 0.5;
+  T pigment_D_edge1 = 0.8;
 
   // Objects
   std::vector<std::unique_ptr<ObjectPlate>> plates;
@@ -170,7 +170,7 @@ public:
   void initializeBasic(std::string name);
   void setupScene(const float fps, const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments);
   void sampleMultipleVdbObjects(std::vector<std::string> vdb_filenames, std::vector<uint8_t> colors, T kRadius, T ppc);
-  void blobs(const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments);
+  void blobs(const std::vector<float> &colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>> &pigments);
   void prepareSimulation();
   void step();
   bool frameFinished();
@@ -267,15 +267,13 @@ public:
 
   // initial objects names and their volume
   const std::vector<BlobModel> blobDatabase = {
-    {"../matter/levelsets/blobs/Blob_01.vdb", 0.01f, 1.1795f},
-    {"../matter/levelsets/blobs/Blob_03.vdb", 0.03f, 0.9912f},
-    {"../matter/levelsets/blobs/Blob_05.vdb", 0.05f, 1.0005f},
-    {"../matter/levelsets/blobs/Blob_07.vdb", 0.07f, 0.9933f},
-    {"../matter/levelsets/blobs/Blob_09.vdb", 0.09f, 0.9965f},
-    {"../matter/levelsets/blobs/Blob_11.vdb", 0.11f, 0.9696f}
+    {"../matter/levelsets/blobs/Blob_01.vdb", 0.0056f, 1.18518519402f},
+    {"../matter/levelsets/blobs/Blob_02.vdb", 0.0151f, 1.0168350935f},
+    {"../matter/levelsets/blobs/Blob_03.vdb", 0.0246f, 1.01122200489f},
+    {"../matter/levelsets/blobs/Blob_04.vdb", 0.0341f, 0.998389661312f},
+    {"../matter/levelsets/blobs/Blob_05.vdb", 0.0436f, 0.994956791401f},
+    {"../matter/levelsets/blobs/Blob_06.vdb", 0.053f,  1.02880656719f}
   };
-
-  T volume_sum = 0.12;
 
 }; // end Simulation class
 

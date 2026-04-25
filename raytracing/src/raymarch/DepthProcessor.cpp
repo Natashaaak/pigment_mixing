@@ -17,7 +17,6 @@ DepthProcessor::~DepthProcessor() {
     glDeleteTextures(1, &DallSmooth);
     glDeleteTextures(1, &DallTMP);
     glDeleteTextures(1, &Nscreen);
-    glDeleteTextures(1, &Variance);
     glDeleteBuffers(1, &VBO);
     glDeleteBuffers(1, &VBOMat);
     glDeleteBuffers(1, &EBODagg);
@@ -28,7 +27,6 @@ DepthProcessor::~DepthProcessor() {
     delete shader;
     delete gaussBilateral;
     delete compN;
-    delete depthVarShader;
 }
 
 void DepthProcessor::genBuffers() {
@@ -102,15 +100,6 @@ void DepthProcessor::genBuffers() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glGenTextures(1, &Variance);
-    glBindTexture(GL_TEXTURE_2D, Variance);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI,
-        10, 10, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
 void DepthProcessor::genFbo() {
@@ -169,14 +158,9 @@ void DepthProcessor::initShader() {
     shader = new Shader("../shaders/raymarching/DepthMap.vert", "../shaders/raymarching/DepthMap.frag");
     gaussBilateral = new Shader("../shaders/raymarching/GaussBilateral.glsl");
     compN = new Shader("../shaders/raymarching/NScreen.glsl");
-    depthVarShader = new Shader("../shaders/raymarching/depthVariance.glsl");
 }
 
 void DepthProcessor::bindDall(Shader *sh) {
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, Variance);
-    sh->setUniform("VarianceTex", 2);
-
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, Dall);
     sh->setUniform("Dall", 3);
@@ -195,10 +179,6 @@ void DepthProcessor::bindDepthMaps(int start, Shader* sh) const {
     glActiveTexture(GL_TEXTURE0 + start + 2);
     glBindTexture(GL_TEXTURE_2D, Nscreen);
     sh->setUniform("Nscreen", start + 2);
-
-    glActiveTexture(GL_TEXTURE0 + start + 3);
-    glBindTexture(GL_TEXTURE_2D, Variance);
-    sh->setUniform("VarianceTex", start + 3);
 
     c->bindBuffers(6);
 }
@@ -243,24 +223,6 @@ void DepthProcessor::smoothDall(MPMIntegrationSim *mpm, GLint ww, GLint wh, Came
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 }
 
-void DepthProcessor::computeDepthVar(GLint ww, GLint wh) {
-    depthVarShader->use();
-    depthVarShader->setUniform("width", ww);
-    depthVarShader->setUniform("height", wh);
-    depthVarShader->setUniform("e1", state.e1);
-    depthVarShader->setUniform("e2", state.e2);
-    depthVarShader->setUniform("test", state.testFullRes);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, Dall);
-    depthVarShader->setUniform("Dall", 0);
-    glBindImageTexture(1, Variance, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8UI);
-    int gx = (ww + state.groupSizeRayMarching.x - 1) / state.groupSizeRayMarching.x;
-    int gy = (wh + state.groupSizeRayMarching.y - 1) / state.groupSizeRayMarching.y;
-    glDispatchCompute(gx, gy, 1);
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-}
-
 void DepthProcessor::computeNScreen(GLint ww, GLint wh, Camera *camera) {
     compN->use();
     glActiveTexture(GL_TEXTURE0);
@@ -277,7 +239,6 @@ void DepthProcessor::computeNScreen(GLint ww, GLint wh, Camera *camera) {
 }
 
 void DepthProcessor::generateDepthMaps(MPMIntegrationSim *mpm, GLint ww, GLint wh, Camera *camera) {
-    // depthVarTimer.start();
     idsDagg.clear();
     idsDall.clear();
     ctimer.start(2);
@@ -316,7 +277,6 @@ void DepthProcessor::generateDepthMaps(MPMIntegrationSim *mpm, GLint ww, GLint w
 
     smoothDall(mpm, ww, wh, camera);
     computeNScreen(ww, wh, camera);
-    computeDepthVar(ww, wh);
 }
 
 void DepthProcessor::resizeTextures(GLint ww, GLint wh) {
@@ -344,12 +304,6 @@ void DepthProcessor::resizeTextures(GLint ww, GLint wh) {
         glBindTexture(GL_TEXTURE_2D, Nscreen);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F,
                     ww, wh, 0, GL_RGBA, GL_FLOAT, nullptr);
-
-        int gx = (ww + state.groupSizeRayMarching.x - 1) / state.groupSizeRayMarching.x;
-        int gy = (wh + state.groupSizeRayMarching.y - 1) / state.groupSizeRayMarching.y;
-        glBindTexture(GL_TEXTURE_2D, Variance);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI,
-            gx, gy, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr);
 
         glBindRenderbuffer(GL_RENDERBUFFER, rdepth);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32F, ww, wh);
@@ -391,4 +345,3 @@ void DepthProcessor::buffers(MPMIntegrationSim *mpm) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
 }
-

@@ -39,6 +39,7 @@ void MPMIntegrationSim::setupScene(){
     sim->prepareSimulation();
     particles.resize(getParticleAmount());
     pigments.resize(getParticleAmount());
+    diffusion_factors.resize(getParticleAmount());
 }
 
 void MPMIntegrationSim::simStep(){
@@ -69,7 +70,7 @@ std::vector<glm::vec4> &MPMIntegrationSim::recountParticles() {
         }
         for (int c = 0; c < 7; ++c)
             this->pigments[i][c] = sim_particles.pigments[i](c);
-        this->pigments[i][7] = 0.0f;  // set the padding to 0.0
+        this->diffusion_factors[i] = sim_particles.diffusion_factor[i];
     }
 
     return this->particles;
@@ -80,8 +81,12 @@ std::vector<glm::vec4> &MPMIntegrationSim::getParticles() {
     return particles;
 }
 
-std::vector<std::array<float, 8>>& MPMIntegrationSim::getPigments() {
+std::vector<std::array<float, 7>>& MPMIntegrationSim::getPigments() {
     return pigments;
+}
+
+std::vector<float>& MPMIntegrationSim::getDiffusionFactors() {
+    return diffusion_factors;
 }
 
 unsigned MPMIntegrationSim::getParticleAmount() {

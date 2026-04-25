@@ -50,6 +50,7 @@ struct State {
     bool isAni = false;
     bool testAllFilled = false;
     bool testFullRes = true;
+    bool showDiffusion = true;
     std::vector<uint> aa{1u, 2u, 4u};
     std::vector<float> fonts{10.0f, 12.0f, 14.0f, 16.0f, 18.0f, 20.0f, 22.0f, 24.0f};
     int fontChoice = 3;

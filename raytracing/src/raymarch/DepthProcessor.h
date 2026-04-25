@@ -3,7 +3,7 @@
  * \file       DepthProcessor.h
  * \brief      Processes all the pipeline steps connected to depth.
  *
- *  Processes Dall, Dagg, DallSmooth, Nscreen, DepthVar pipeline steps.
+ *  Processes Dall, Dagg, DallSmooth, Nscreen pipeline steps.
  *
  */
 //----------------------------------------------------------------------------------------
@@ -38,7 +38,7 @@ public:
     void bindDepthMaps(int start, Shader *sh) const;
 
     /**
-     * Binds Dall and depthVar to interpolation shader
+     * Binds Dall to interpolation shader
      * @param sh shader
      */
     void bindDall(Shader *sh);
@@ -66,16 +66,9 @@ private:
      */
     void computeNScreen(GLint ww, GLint wh, Camera *camera);
 
-    /**
-     * Computes depth variance for tiles based on Dall depth map
-     * @param ww framebuffer width
-     * @param wh framebuffer height
-     */
-    void computeDepthVar(GLint ww, GLint wh);
-
     GLuint Dagg = 0, Dall = 0, fboDagg = 0, fboDall = 0, VBO = 0, EBODagg = 0, EBODall = 0,
-    VAODagg = 0, VAODall = 0, rdepth = 0, DallSmooth = 0, DallTMP = 0, Nscreen = 0, Variance = 0, VBOMat = 0;
-    Shader *shader, *gaussBilateral, *compN, *depthVarShader;
+    VAODagg = 0, VAODall = 0, rdepth = 0, DallSmooth = 0, DallTMP = 0, Nscreen = 0, VBOMat = 0;
+    Shader *shader, *gaussBilateral, *compN;
 
     std::vector<unsigned> idsDagg;
     std::vector<unsigned> idsDall;

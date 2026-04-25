@@ -16,7 +16,7 @@ struct State{
 };
 
 struct ParticlePigment{
-    float c[8]; // Padded to 8 floats to perfectly match std::array<float, 8> 32-byte alignment in C++!
+    float c[7];
 };
 
 layout(local_size_x = 16, local_size_y = 16) in;
@@ -30,8 +30,6 @@ layout(binding = 2) uniform sampler2D Dagg;
 layout(binding = 3) uniform sampler2D Dall;
 
 layout(binding = 4) uniform sampler2D Nscreen;
-
-layout(binding = 5) uniform usampler2D VarianceTex;
 
 // mixbox coefficients, the same as in mixbox.cpp
 const float coefs[20][3] = 
@@ -94,6 +92,10 @@ layout(std430, binding = 8) buffer PigmentsBuffer {
     ParticlePigment p_pigments[];
 };
 
+layout(std430, binding = 9) buffer DiffusionBuffer {
+    float p_diffusion[];
+};
+
 ///Image width
 uniform int width;
 ///Image height
@@ -132,19 +134,17 @@ uniform int stepsInside;
 uniform float A;
 ///B parameter from normal blending
 uniform float B;
-///Current variance pass
-uniform int stride;
-///if sould show only depth variance
-uniform bool debugMode;
 ///Max level of bdg cells grouped into texels represented as 1 axis
 uniform uint maxLevel;
 ///If should render with anisotropic kernel
 uniform bool isAni;
 
+uniform bool showDiffusion;
+
 uniform mat4 invSpatulaTransform;
 uniform bool has_spatula;
 uniform vec3 spatulaDim;
-bool use_closest_color = false;
+bool use_closest_color = true;
 float r1 = 0.5;
 float r2 = 0.2;
 
@@ -159,10 +159,9 @@ const vec3 spatula_color = vec3(1.0f, 0.0f, 0.0f);
 const vec4 floorCol = vec4(0.375f, 0.35f, 0.325f, 1.0f);
 ivec3 cS4 = ivec3(3);
 ivec3 cS2 = ivec3(1);
-uint variance = 0;
 
 vec3 mix_latent_to_rgb( ParticlePigment pigments) {
-    float c[8] = pigments.c;
+    float c[7] = pigments.c;
     float c00 = c[0]*c[0];
     float c11 = c[1]*c[1];
     float c22 = c[2]*c[2];
@@ -415,7 +414,8 @@ float computeDensity(vec3 pos, out vec3 outColor){
     float min_dist = 1000000.0f;
     uint closest_id = 0;
     bool found_closest = false;
-    float accumulated_pigment[8] = float[](0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    float accumulated_pigment[7] = float[](0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    float accumulated_diffusion = 0.0f;
 
     ivec3 cell = ivec3(floor((pos - gridStart) / voxelSize));
     for(int x = -1; x < 2; x++){
@@ -464,21 +464,30 @@ float computeDensity(vec3 pos, out vec3 outColor){
                     density += w;
                     
                     if (!use_closest_color) {
-                        for (int c = 0; c < 8; ++c) {
+                        for (int c = 0; c < 7; ++c) {
                             accumulated_pigment[c] += p_pigments[sphereID].c[c] * w;
                         }
                     }
+                    accumulated_diffusion += p_diffusion[sphereID] * w;
                 }
             }
         }
     }
     if(density > 0.0f) {
         if (use_closest_color && found_closest) {
-            outColor = mix_latent_to_rgb(p_pigments[closest_id]); // Convert latent to RGB using the mixbox coefficients
+            if (showDiffusion) {
+                outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), p_diffusion[closest_id]);
+            } else {
+                outColor = mix_latent_to_rgb(p_pigments[closest_id]); // Convert latent to RGB using the mixbox coefficients
+            }
         } else if (!use_closest_color) {
-            ParticlePigment blended_pigment;
-            for (int i = 0; i < 8; ++i) blended_pigment.c[i] = accumulated_pigment[i] / density;
-            outColor = mix_latent_to_rgb(blended_pigment);
+            if (showDiffusion) {
+                outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), accumulated_diffusion / density);
+            } else {
+                ParticlePigment blended_pigment;
+                for (int i = 0; i < 7; ++i) blended_pigment.c[i] = accumulated_pigment[i] / density;
+                outColor = mix_latent_to_rgb(blended_pigment);
+            }
         }
     }
     return density;
@@ -546,32 +555,13 @@ void main(){
     bool hasSkipped = false;
     bool foundSurface = false;
     ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 origPix = pix * stride;
+    ivec2 origPix = pix;
     if(origPix.x >= width || origPix.y>= height){
             return;
     }
     cS4 = (cellsSize + ivec3(4) - 1) / 4;
     cS2 = (cellsSize + ivec3(2) - 1) / 2;
     uint locId = gl_LocalInvocationIndex;
-    variance = texelFetch(VarianceTex, ivec2(origPix/lcs), 0).r;
-    if(debugMode){
-        if(variance == 0){
-            imageStore(outTex, origPix, vec4(1.0, 1.0, 1.0, 1.0)); //White
-        }
-        else if(variance == 1){
-            imageStore(outTex, origPix, vec4(1.0, 0.0, 1.0, 1.0)); //Magenta
-        }
-        else if(variance == 2){
-            imageStore(outTex, origPix, vec4(0.0, 1.0, 1.0, 1.0)); //Turqoise
-        }
-        else if(variance == 4){
-            imageStore(outTex, origPix, vec4(1.0, 1.0, 0.0, 1.0)); //Yellow
-        }
-        return;
-    }
-    if(variance != stride /*|| shouldExit*/){
-        return;
-    }
     float depth = texelFetch(Dall, origPix, 0).r;
     if(!isAni)
         poly6 /= pow(h, 9.0f);
@@ -582,7 +572,9 @@ void main(){
     float t_spatula = 1e6; 
     bool hit_spatula = false;
 
-    if (has_spatula) {
+    // TEMP
+    // if (has_spatula) {
+    if (false) {
         float t_temp;
         vec3 p_temp;
         // SDF sphere tracing for spatula

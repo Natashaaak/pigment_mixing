@@ -50,7 +50,9 @@ public:
      */
     std::vector<glm::vec4>& getParticles();
 
-    std::vector<std::array<float, 8>>& getPigments();
+    std::vector<std::array<float, 7>>& getPigments();
+
+    std::vector<float>& getDiffusionFactors();
 
     /**
      * Recounts current positions of all particles after each simulation step
@@ -78,7 +80,8 @@ private:
     Simulation* sim;
     
     std::vector<glm::vec4> particles;
-    std::vector<std::array<float, 8>> pigments;
+    std::vector<std::array<float, 7>> pigments;
+    std::vector<float> diffusion_factors;
     // colors ratio (cdf), first one is ommited bcs always = 0
     std::vector<float> ratios;
 

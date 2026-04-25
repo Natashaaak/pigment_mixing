@@ -17,8 +17,8 @@ public:
         transform.setIdentity();
         invTransform.setIdentity();
 
-        halfWidth = 0.2; // 20 cm
-        halfLength = 0.5; // 50 cm
+        halfWidth = 0.3684; // 1 cm * 36.84 (global scale factor)
+        halfLength = 0.7368; // 2 cm * 36.84 (global scale factor)
         halfThickness = 0.05; // 5 cm
 
         animation_path = anim_path;

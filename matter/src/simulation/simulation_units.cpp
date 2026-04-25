@@ -36,10 +36,10 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
         try {
             nlohmann::json data = nlohmann::json::parse(config_file);
             pigment_D     = data.value("D", 0.05f);
-            pigment_D0    = data.value("D0", 0.01f);
-            pigment_alpha = data.value("alpha", 1.0f);
-            pigment_beta  = data.value("beta", 1.0f);
-            pigment_p_max = data.value("p_max", 1000.0f);
+            pigment_D_0   = data.value("D_0", 10e-5f);
+            pigment_D_max = data.value("D_max", 10e-2f);
+            pigment_D_edge0 = data.value("D_edge0", 0.5f);
+            pigment_D_edge1 = data.value("D_edge1", 0.8f);
             debug("Loaded pigment config successfully.");
         } catch (const nlohmann::json::parse_error& e) {
             debug("Parse error in pigment_config.json: ", e.what());

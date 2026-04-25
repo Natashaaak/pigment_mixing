@@ -5,6 +5,7 @@
 RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     glGenBuffers(1, &spheresSSBO);
     glGenBuffers(1, &pigmentsSSBO);
+    glGenBuffers(1, &diffusionSSBO);
     depthMaps = new DepthProcessor();
     this->a = a;
     bdg = new BinaryDensityGrid(a, mpm);
@@ -18,9 +19,9 @@ RayMarch::~RayMarch() {
     delete bdg;
     delete shader;
     delete texShader;
-    delete interpolation;
     glDeleteBuffers(1, &spheresSSBO);
     glDeleteBuffers(1, &pigmentsSSBO);
+    glDeleteBuffers(1, &diffusionSSBO);
     glDeleteTextures(1, &outputTex);
     glDeleteTextures(1, &normalDepthTex);
     glDeleteBuffers(1, &quadVBO);
@@ -30,7 +31,6 @@ RayMarch::~RayMarch() {
 void RayMarch::initShader() {
     shader = new Shader("../shaders/raymarching/raymarch.glsl");
     texShader = new Shader("../shaders/raymarching/shader.vert", "../shaders/raymarching/shader.frag");
-    interpolation = new Shader("../shaders/raymarching/Billinearinterpolation.glsl");
 }
 
 void RayMarch::texQuadInit() {
@@ -116,12 +116,21 @@ void RayMarch::bindSpheres(MPMIntegrationSim *mpm) {
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, pigmentsSSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER,
-        mpm->getParticleAmount() * sizeof(std::array<float, 8>),
+        mpm->getParticleAmount() * sizeof(std::array<float, 7>),
         nullptr,
         GL_STREAM_DRAW);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
-        mpm->getParticleAmount() * sizeof(std::array<float, 8>), mpm->getPigments().data());
+        mpm->getParticleAmount() * sizeof(std::array<float, 7>), mpm->getPigments().data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start + 8, pigmentsSSBO);
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, diffusionSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER,
+        mpm->getParticleAmount() * sizeof(float),
+        nullptr,
+        GL_STREAM_DRAW);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
+        mpm->getParticleAmount() * sizeof(float), mpm->getDiffusionFactors().data());
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start + 9, diffusionSSBO);
 }
 
 void RayMarch::renderTex() {
@@ -185,9 +194,9 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("stepsInside", state.stepsInside);
     shader->setUniform("A", state.A);
     shader->setUniform("B", state.B);
-    shader->setUniform("debugMode", state.debugMode);
     shader->setUniform("maxLevel", state.aa[state.currRes]);
     shader->setUniform("isAni", state.isAni);
+    shader->setUniform("showDiffusion", state.showDiffusion);
 
     // Bind spatula uniforms
     shader->setUniform("invSpatulaTransform", mpm->getSpatulaInvTransform());
@@ -197,31 +206,9 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     GLuint groupCountX = (ww + state.groupSizeRayMarching.x - 1) / state.groupSizeRayMarching.x;
     GLuint groupCountY = (wh + state.groupSizeRayMarching.y - 1) / state.groupSizeRayMarching.y;
     // glBeginQuery(GL_TIME_ELAPSED, timer.queries[1]);
-    shader->setUniform("stride", 1);
     glDispatchCompute(groupCountX, groupCountY, 1);
-    if (!state.testFullRes) {
-        shader->setUniform("stride", 2);
-    glDispatchCompute((groupCountX + 2 - 1) / 2, (groupCountY + 2 - 1) / 2, 1);
-    shader->setUniform("stride", 4);
-    glDispatchCompute((groupCountX + 4 - 1) / 4, (groupCountY + 4 - 1) / 4, 1);
-    }
 
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-    if (!state.debugMode || !state.testFullRes) {
-        interpolation->use();
-        interpolation->setUniform("width", ww);
-        interpolation->setUniform("height", wh);
-        interpolation->setUniform("maxdv", mpm->getSupportRadius() * 2);
-        glBindImageTexture(0, outputTex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-        glBindImageTexture(1, normalDepthTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
-        interpolation->setUniform("stride", 4);
-        depthMaps->bindDall(interpolation);
-        glDispatchCompute(groupCountX, groupCountY, 1);
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-        interpolation->setUniform("stride", 2);
-        glDispatchCompute(groupCountX, groupCountY, 1);
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-    }
     renderTex();
     // timer.end();
     // glEndQuery(GL_TIME_ELAPSED);

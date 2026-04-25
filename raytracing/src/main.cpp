@@ -42,10 +42,10 @@ bool screenshotsTaken = false;
 extern std::string g_spatula_anim_path;
 int g_num_colors = 2;
 float g_colors[4][3] = {
-    {1.0f, 1.0f, 0.0f}, // Yellow
-    {0.0f, 0.0f, 1.0f}, // Blue
-    {1.0f, 0.0f, 0.0f}, // Red
-    {0.0f, 1.0f, 0.0f}  // Green
+    {1.0f, 0.7882f, 0.0f}, // Yellow
+    {0.2353f, 0.2275f, 0.3451f}, // Blue
+    {0.9765f, 0.9804f, 0.9686f}, // White
+    {0.4353f, 0.2196f, 0.2588f}  // Magenta
 };
 float g_ratios[4] = { 0.5f, 0.5f, 0.0f, 0.0f };
 
@@ -417,34 +417,6 @@ void gui() {
     }
     ImGui::Spacing();
     ImGui::Spacing();
-    if (ImGui::CollapsingHeader("Depth Variance", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::PushID(0);
-        ImGui::Text("Full to half resolution threshold:");
-        ImGui::SliderFloat("##FullToHalf", &state.e2, 0.000001f, 0.05f, "%.6f");
-        ImGui::SameLine();
-        if (ImGui::Button("-", ImVec2(30, 0))) {
-            state.e2 -= 0.000001;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("+", ImVec2(30, 0))) {
-            state.e2 += 0.000001;
-        }
-        ImGui::PopID();
-        ImGui::PushID(1);
-        ImGui::Text("Half to quarter resolution threshold:");
-        ImGui::SliderFloat("##HalfToQuarter", &state.e1, 0.000005f, 0.05f, "%.6f");
-        ImGui::SameLine();
-        if (ImGui::Button("-", ImVec2(30, 0))) {
-            state.e1 -= 0.000001;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("+", ImVec2(30, 0))) {
-            state.e1 += 0.000001;
-        }
-        ImGui::PopID();
-    }
-    ImGui::Spacing();
-    ImGui::Spacing();
     if (ImGui::CollapsingHeader("Anisotropy for surface construction", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("Anisotropy for rendering:");
         ImGui::Checkbox("##Anisotropy", &state.isAni);
@@ -470,20 +442,11 @@ void gui() {
 
         ImGui::Text("Visible spheres:");
         ImGui::Checkbox("##seeSpheres", &state.seeSpheres);
-
-        ImGui::Text("See tiles resolution:");
-        ImGui::Checkbox("##TilesRes", &state.debugMode);
-
-        //Are used for scene testing, uncomment to be able to test accelerations.
-        // ImGui::Text("All cells are valid:");
-        // if (ImGui::Checkbox("##cellsValid", &state.testAllFilled)) {
-        //     state.maxStepCount = 9000;
-        //     state.maxSkipCount = 9000;
-        // }
-        //
-        // ImGui::Text("Full res everywhere:");
-        // if (ImGui::Checkbox("##testfullres", &state.testFullRes)) {
-        // }
+    }
+    ImGui::Spacing();
+    ImGui::Spacing();
+    if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Checkbox("Show Diffusion (Red/Blue)", &state.showDiffusion);
     }
     ImGui::Spacing();
     ImGui::Spacing();
