@@ -31,6 +31,9 @@ public:
      */
     std::vector<glm::mat3>& getMatricesInv();
     void bindBuffers(int start);
+    
+    const std::vector<glm::mat4>& getMatrices() const { return matrices; };
+
 private:
     /**
      * Computes anisotropy matrix for the needed particle
@@ -46,6 +49,8 @@ private:
      * @return float density
      */
     float countCurrDens(MPMIntegrationSim *mpm, unsigned id);
+
+    
     std::vector<glm::mat4> matrices;
     std::vector<glm::mat3> matricesInv;
     std::vector<float> determinants;

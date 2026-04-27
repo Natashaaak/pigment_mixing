@@ -31,6 +31,10 @@ layout(binding = 3) uniform sampler2D Dall;
 
 layout(binding = 4) uniform sampler2D Nscreen;
 
+layout(std430, binding = 10) buffer RenderGrid {
+    float data[]; // 8 floats per pixel
+};
+
 // mixbox coefficients, the same as in mixbox.cpp
 const float coefs[20][3] = 
 {
@@ -139,7 +143,11 @@ uniform uint maxLevel;
 ///If should render with anisotropic kernel
 uniform bool isAni;
 
+uniform bool showNormals;
+
 uniform bool showDiffusion;
+uniform float sigma_color;
+uniform float sigma_spatial;
 
 uniform mat4 invSpatulaTransform;
 uniform bool has_spatula;
@@ -328,30 +336,43 @@ void stateInit(out State state, in Ray ray){
 ///Checks if a texel(or voxel) for current bdg might contain surface
 uint getPossibility(in State state){
     uint possibility = 0;
-    if(state.currLevel == 4u){
-        bvec3 outOfBoundsGreat = greaterThanEqual(state.cell, cS4);
-        bvec3 outOfBoundsLess = lessThan(state.cell, ivec3(0));
-        if(any(outOfBoundsLess) || any(outOfBoundsGreat)){
-            return 1000u;
+    ivec3 currentSize;
+    uint levelM;
+
+    if(state.currLevel == 4u) { currentSize = cS4; }
+    else if(state.currLevel == 2u) { currentSize = cS2; }
+    else { currentSize = cellsSize; }
+
+    bvec3 outOfBoundsGreat = greaterThanEqual(state.cell, currentSize);
+    bvec3 outOfBoundsLess = lessThan(state.cell, ivec3(0));
+
+    if(any(outOfBoundsLess) || any(outOfBoundsGreat)){
+        // 1. KONTROLA PADDINGU (pro anizotropní přesahy)
+        // Povolujeme nahlédnout kousek za hranice v Level 1
+        if (state.currLevel == 1u) {
+            if (all(greaterThanEqual(state.cell, ivec3(-3))) && 
+                all(lessThanEqual(state.cell, cellsSize + ivec3(2)))) 
+                return 1u; // Povolíme výpočet hustoty v "halo" zóně
         }
-        possibility = M4[state.cell.x + cS4.x * (state.cell.z * cS4.y + state.cell.y)];
-    }
-    else if(state.currLevel == 2u){
-        bvec3 outOfBoundsGreat = greaterThanEqual(state.cell, cS2);
-        bvec3 outOfBoundsLess = lessThan(state.cell, ivec3(0));
-        if(any(outOfBoundsLess) || any(outOfBoundsGreat)){
-            return 1000u;
+
+        // 2. KONTROLA SMĚRU (Zabránění nekonečným smyčkám)
+        // Pokud jsme mimo a paprsek míří pryč od mřížky, ukončíme ho
+        if ((outOfBoundsLess.x && state.move.x <= 0) || (outOfBoundsGreat.x && state.move.x >= 0) ||
+            (outOfBoundsLess.y && state.move.y <= 0) || (outOfBoundsGreat.y && state.move.y >= 0) ||
+            (outOfBoundsLess.z && state.move.z <= 0) || (outOfBoundsGreat.z && state.move.z >= 0)) {
+            return 1000u; // Definitivní konec
         }
-        possibility = M2[state.cell.x + cS2.x * (state.cell.z * cS2.y + state.cell.y)];
+
+        // 3. POKRAČOVÁNÍ (Skip k mřížce)
+        // Jsme mimo, ale míříme k mřížce -> skipneme prázdný prostor
+        return 0u; 
     }
-    else if(state.currLevel == 1u){
-        bvec3 outOfBoundsGreat = greaterThanEqual(state.cell, cellsSize);
-        bvec3 outOfBoundsLess = lessThan(state.cell, ivec3(0));
-        if(any(outOfBoundsLess) || any(outOfBoundsGreat)){
-            return 1000u;
-        }
-        possibility = M[state.cell.x + cellsSize.x * (state.cell.z * cellsSize.y + state.cell.y)];
-    }
+
+    // Načtení reálných dat z BDG pokud jsme uvnitř
+    if(state.currLevel == 4u) possibility = M4[state.cell.x + cS4.x * (state.cell.z * cS4.y + state.cell.y)];
+    else if(state.currLevel == 2u) possibility = M2[state.cell.x + cS2.x * (state.cell.z * cS2.y + state.cell.y)];
+    else possibility = M[state.cell.x + cellsSize.x * (state.cell.z * cellsSize.y + state.cell.y)];
+
     return possibility;
 }
 ///Moves the ray inside with tiny steps
@@ -406,15 +427,112 @@ void updateTCurr(inout State state, in Ray ray){
     }
 }
 
+vec3 computeFilteredColor(vec3 pos) {
+    // 1. Setup spatial parameters pro rozšířené okolí (3x3x3 = 27 voxelů)
+    vec3 pig_pos = (pos - gridStart) / (voxelSize / 4.0) - 0.5;
+    ivec3 center_cell = ivec3(round(pig_pos)); // Místo floor bereme nejbližší středový voxel
+    ivec3 pigCellsSize = cellsSize * 4;
+
+    ParticlePigment colors[27];
+    float weights[27];
+    ParticlePigment mean;
+    for(int c=0; c<7; ++c) mean.c[c] = 0.0;
+
+    int i = 0;
+    float sum_w = 0.0;
+
+    for (int dz = -1; dz <= 1; ++dz) {
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                ivec3 offset = ivec3(dx, dy, dz);
+                ivec3 current_cell = clamp(center_cell + offset, ivec3(0), pigCellsSize - ivec3(1));
+                uint idx = (uint(current_cell.z) * uint(pigCellsSize.y) * uint(pigCellsSize.x) + uint(current_cell.y) * uint(pigCellsSize.x) + uint(current_cell.x)) * 8u;
+                
+                // Načteme barvu souseda
+                for(int c=0; c<7; ++c) colors[i].c[c] = data[idx + c];
+
+                // Rozšířená vyhlazená váha (aplikace smoothstep filtru)
+                vec3 dist = abs(pig_pos - vec3(center_cell + offset));
+                // Smoothstep zajistí, že na hranici (1.5) bude váha plynule 
+                // a měkce klesat k nule bez ostrého zlomu v interpolaci.
+                vec3 w3 = smoothstep(vec3(1.5), vec3(0.0), dist);
+                weights[i] = w3.x * w3.y * w3.z;
+                sum_w += weights[i];
+                
+                i++;
+            }
+        }
+    }
+
+    // Normalizace vah a výpočet váženého průměru (smooth trilinear ref)
+    for (int j = 0; j < 27; ++j) {
+        weights[j] /= max(sum_w, 0.00001);
+        for(int c=0; c<7; ++c) {
+            mean.c[c] += colors[j].c[c] * weights[j];
+        }
+    }
+
+    // 2. Výpočet lokálního rozptylu (variance)
+    float variance = 0.0;
+    for (int j = 0; j < 27; ++j) {
+        float diffSq = 0.0;
+        for(int c=0; c<4; ++c) { // Používáme jen 4 pigmenty pro vzdálenost
+            float d = colors[j].c[c] - mean.c[c];
+            diffSq += d * d;
+        }
+        variance += diffSq * weights[j];
+    }
+
+    // 3. Adaptivní sigma na základě variance (rozptyl v 27 voxelech)
+    float sigma_min = 0.001;
+    float sigma_max = max(sigma_color, 0.01);
+    float scale = 10.0; // Citlivost na varianci (možno později vytáhnout do uniform)
+    float adaptiveSigma = mix(sigma_min, sigma_max, clamp(variance * scale, 0.0, 1.0));
+    float sigColorSq = max(adaptiveSigma * adaptiveSigma, 0.000001);
+
+    // 4. Bilaterální filtrace v rozšířeném okolí
+    ParticlePigment final_pigment;
+    for(int c=0; c<7; ++c) final_pigment.c[c] = 0.0;
+    float totalWeight = 0.0;
+
+    for (int j = 0; j < 27; ++j) {
+        // Výpočet barevné podobnosti (Mixbox vzdálenost)
+        float colorDistSq = 0.0;
+        for(int c=0; c<4; ++c) {
+            float d = colors[j].c[c] - mean.c[c];
+            colorDistSq += d * d;
+        }
+        
+        // Bilaterální váha: W_final = W_spatial * e^(-dist^2 / sigma^2)
+        float rangeWeight = exp(-colorDistSq / sigColorSq);
+        float finalWeight = weights[j] * (rangeWeight + 0.05);
+        
+        for (int c = 0; c < 7; ++c) {
+            final_pigment.c[c] += colors[j].c[c] * finalWeight;
+        }
+        totalWeight += finalWeight;
+    }
+
+    // 5. Normalizace
+    if (totalWeight > 0.00001) {
+        for (int c = 0; c < 7; ++c) {
+            final_pigment.c[c] /= totalWeight;
+        }
+        return mix_latent_to_rgb(final_pigment);
+    } else {
+        // Bezpečný fallback na hladkou interpolaci (mean), pokud obě váhy zkolabují
+        return mix_latent_to_rgb(mean); 
+    }
+}
+
 ///Computes density at the current point using only 27 cells around it using poly6 kern
-float computeDensity(vec3 pos, out vec3 outColor){
+float computeDensity(vec3 pos, vec3 ray_start, float depth, ivec2 pix, out vec3 outColor){
     float density = 0.0f;
     outColor = vec3(0.0f);
     
     float min_dist = 1000000.0f;
     uint closest_id = 0;
     bool found_closest = false;
-    float accumulated_pigment[7] = float[](0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     float accumulated_diffusion = 0.0f;
 
     ivec3 cell = ivec3(floor((pos - gridStart) / voxelSize));
@@ -463,31 +581,26 @@ float computeDensity(vec3 pos, out vec3 outColor){
                     w *= poly6 * hr2 * hr2 * hr2;
                     density += w;
                     
-                    if (!use_closest_color) {
-                        for (int c = 0; c < 7; ++c) {
-                            accumulated_pigment[c] += p_pigments[sphereID].c[c] * w;
-                        }
-                    }
                     accumulated_diffusion += p_diffusion[sphereID] * w;
                 }
             }
         }
     }
     if(density > 0.0f) {
-        if (use_closest_color && found_closest) {
-            if (showDiffusion) {
+        if (showDiffusion) {
+            if (use_closest_color && found_closest) {
                 outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), p_diffusion[closest_id]);
             } else {
-                outColor = mix_latent_to_rgb(p_pigments[closest_id]); // Convert latent to RGB using the mixbox coefficients
-            }
-        } else if (!use_closest_color) {
-            if (showDiffusion) {
                 outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), accumulated_diffusion / density);
-            } else {
-                ParticlePigment blended_pigment;
-                for (int i = 0; i < 7; ++i) blended_pigment.c[i] = accumulated_pigment[i] / density;
-                outColor = mix_latent_to_rgb(blended_pigment);
             }
+        } else if (showNormals) {
+            float rij = (height * 2.0 * DforRIJ) / (2.0 * abs(depth) * tan(viewAngle / 2.0));
+            float w1 = A * length(pos - ray_start);
+            float w2 = exp(B * rij);
+            float w = min(w1 * w2, 1.0f);
+            outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), w);
+        } else {
+            outColor = computeFilteredColor(pos);
         }
     }
     return density;
@@ -535,12 +648,17 @@ vec3 getObjectNormal(vec3 xij){
             }
         }
     }
-    return normalize(grad);
+    return normalize(-grad);
 }
 ///Computes final normal by blending screen and object space normals
-vec3 computeNormal(vec3 pij, vec3 xij, ivec2 pix, float depth){
-    float rij = (height * 2*DforRIJ) / (2 * abs(depth) * tan(viewAngle/2));
+vec3 computeNormal(vec3 pij, vec3 xij, ivec2 pix, float depth_from_tex){
+    float realDepth = (view * vec4(xij, 1.0)).z;
     vec3 NScreenxij = texelFetch(Nscreen, pix, 0).xyz;
+    // cekch discontinuity
+    if (abs(abs(realDepth) - depth_from_tex) > h * 0.5) {
+        return normalize(mat3(view) * getObjectNormal(xij));
+    }
+    float rij = (height * 2*DforRIJ) / (2 * abs(realDepth) * tan(viewAngle/2));
     float w1 = A * length(xij - pij);
     float w2 = exp(B*rij);
     float w = min(w1*w2, 1);
@@ -548,83 +666,39 @@ vec3 computeNormal(vec3 pij, vec3 xij, ivec2 pix, float depth){
         return NScreenxij;
     }
     vec3 NObjectij = normalize(mat3(view) * getObjectNormal(xij));
-    return w * NObjectij + (1 - w)*NScreenxij;
+    return normalize(w * NObjectij + (1 - w)*NScreenxij);
 }
 ///Main ray marching loop that traverses ray into the scene until it finds the surface or no.
 void main(){
-    bool hasSkipped = false;
-    bool foundSurface = false;
     ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 origPix = pix;
-    if(origPix.x >= width || origPix.y>= height){
-            return;
+     if(pix.x >= width || pix.y >= height){
+        return;
     }
+
     cS4 = (cellsSize + ivec3(4) - 1) / 4;
     cS2 = (cellsSize + ivec3(2) - 1) / 2;
-    uint locId = gl_LocalInvocationIndex;
-    float depth = texelFetch(Dall, origPix, 0).r;
+
     if(!isAni)
         poly6 /= pow(h, 9.0f);
     spiky /= pow(h, 6.0f);
+
     Ray ray_vdb;
-    getRay(origPix, 0.0f, ray_vdb);
+    getRay(pix, 0.0f, ray_vdb);
     
+    // 1. Intersect Spatula
     float t_spatula = 1e6; 
     bool hit_spatula = false;
 
     // TEMP
     // if (has_spatula) {
-    if (false) {
-        float t_temp;
+    if (true) {
         vec3 p_temp;
-        // SDF sphere tracing for spatula
-        if (rayMarchSpatula(ray_vdb, t_temp, p_temp, 1000.0)) {
-            t_spatula = t_temp;
-            hit_spatula = true;
-        }
+        hit_spatula = rayMarchSpatula(ray_vdb, t_spatula, p_temp, 1000.0);
     }
 
-    Ray ray_mpm;
-    if (depth > 0.0f) {
-        getRay(origPix, depth, ray_mpm);
-        State state;
-        stateInit(state, ray_mpm);
-        float dist_to_mpm_start = length(ray_mpm.start - ray_vdb.start);
-        for(uint i = 0; i < maxStepCount; i++){
-            if(i > maxSkipCount && !hasSkipped){
-                float depthDagg = texelFetch(Dagg, origPix, 0).r;
-                depth = depthDagg;
-                hasSkipped = true;
-                getRay(origPix, depthDagg, ray_mpm);
-                stateInit(state, ray_mpm); //Skipping to Dagg depth and starting from there
-                dist_to_mpm_start = length(ray_mpm.start - ray_vdb.start);
-            }
-            updateTCurr(state, ray_mpm);
-
-            if (hit_spatula && (state.tcurr + dist_to_mpm_start) > t_spatula) break;  // if we already hit the spatula surface and ray for mpm is farther than that, we can stop
-
-            vec3 pos = ray_mpm.start + ray_mpm.dir * state.tcurr;
-            if(getPossibility(state) == 1000u){
-                break;
-            }
-
-            vec3 surfaceColor;
-            float density = computeDensity(pos, surfaceColor);
-
-            if(density > iso){  // mpm is closer than vbd surface
-                foundSurface = true;
-                vec3 N = computeNormal(ray_mpm.start, pos, origPix, depth);
-                float diff = max(dot(N, lightDirView), 0.0);
-                imageStore(outTex, origPix, vec4(surfaceColor * diff, 1.0f));
-                imageStore(normalDepthTex, origPix, vec4(N, pos.z));
-                return;
-            }
-        }
-    }
-
+    // 2. Intersect Floor
     float t_floor = 1e6;
     bool hit_floor = false;
-
     if (ray_vdb.dir.y < 0.0) {
         float temp_t = (gridStart.y - ray_vdb.start.y) / ray_vdb.dir.y;
         if (temp_t > 0.0) {
@@ -633,26 +707,73 @@ void main(){
         }
     }
 
-    if(hit_spatula){
-        if (hit_floor && t_floor < t_spatula) {
-            hit_spatula = false; // "Zrušíme" zásah špachtle, protože je pod zemí
-        } else {
-            vec3 pos_spatula = ray_vdb.start + ray_vdb.dir * t_spatula;
-            vec3 N = getSpatulaNormal(pos_spatula);
+    // 3. Resolve nearest environment intersection
+    float t_env = 1e6;
+    int env_hit_type = 0; // 0 = none, 1 = spatula, 2 = floor
+    if (hit_spatula && (!hit_floor || t_spatula < t_floor)) {
+        t_env = t_spatula;
+        env_hit_type = 1;
+    } else if (hit_floor) {
+        t_env = t_floor;
+        env_hit_type = 2;
+    }
 
-            float diff = max(dot(N, lightDirView), 0.0);
-            vec3 final_spatula_color = spatula_color * (diff * 0.8 + 0.2);
+    // 4. Raymarch MPM
+    float depth = texelFetch(Dall, pix, 0).r;
+    if (depth > 0.0f) {
+        Ray ray_mpm;
+        getRay(pix, depth, ray_mpm);
+        State state;
+        stateInit(state, ray_mpm);
+        
+        bool hasSkipped = false;
+        float dist_to_mpm_start = length(ray_mpm.start - ray_vdb.start);
+        
+        for(uint i = 0; i < maxStepCount; i++){
+            if(i > maxSkipCount && !hasSkipped){
+                depth = texelFetch(Dagg, pix, 0).r;
+                hasSkipped = true;
+                getRay(pix, depth, ray_mpm);
+                stateInit(state, ray_mpm); //Skipping to Dagg depth and starting from there
+                dist_to_mpm_start = length(ray_mpm.start - ray_vdb.start);
+            }
+            updateTCurr(state, ray_mpm);
 
-            imageStore(outTex, origPix, vec4(final_spatula_color, 1.0f));
-            float viewZ = (view * vec4(pos_spatula, 1.0)).z;
-            imageStore(normalDepthTex, origPix, vec4(N, viewZ));
-            foundSurface = true;
+            // Early exit if we marched further than our closest environment hit
+            if (env_hit_type != 0 && (state.tcurr + dist_to_mpm_start) > t_env) {
+                break;
+            }
+
+            vec3 pos = ray_mpm.start + ray_mpm.dir * state.tcurr;
+            if(getPossibility(state) == 1000u){
+                break;
+            }
+
+            vec3 surfaceColor;
+            float density = computeDensity(pos, ray_mpm.start, depth, pix, surfaceColor);
+
+            if(density > iso){
+                vec3 N = computeNormal(ray_mpm.start, pos, pix, depth);
+                float diff = max(dot(N, -lightDirView), 0.0);
+                imageStore(outTex, pix, vec4(surfaceColor * diff , 1.0f));
+                imageStore(normalDepthTex, pix, vec4(N, pos.z));
+                return;
+            }
         }
     }
-    if(!foundSurface && hit_floor){
-        // Floor plane intersection
-        float t_floor = (gridStart.y - ray_vdb.start.y) / ray_vdb.dir.y;
-        vec3 hit_pos = ray_vdb.start + t_floor * ray_vdb.dir;
+
+    // 5. Render environment fallback
+    if (env_hit_type == 1) { // Spatula
+        vec3 pos_spatula = ray_vdb.start + ray_vdb.dir * t_env;
+        vec3 N = getSpatulaNormal(pos_spatula);
+        float diff = max(dot(N, lightDirView), 0.0);
+        vec3 final_spatula_color = spatula_color * (diff * 0.8 + 0.2);
+
+        imageStore(outTex, pix, vec4(final_spatula_color, 1.0f));
+        float viewZ = (view * vec4(pos_spatula, 1.0)).z;
+        imageStore(normalDepthTex, pix, vec4(N, viewZ));
+    } else if (env_hit_type == 2) { // Floor
+        vec3 hit_pos = ray_vdb.start + t_env * ray_vdb.dir;
         vec3 N_floor = vec3(0.0, 1.0, 0.0);
         vec3 N_floor_view = normalize(mat3(view) * N_floor);
         
@@ -664,15 +785,11 @@ void main(){
         // Use absolute dot product and add ambient light so it doesn't render completely black
         float diff = abs(dot(N_floor_view, lightDirView)) * 0.7 + 0.3;
         
-        float floorViewZ = (view * vec4(hit_pos, 1.0)).z; // Sjednocení prostoru hloubky
-        imageStore(normalDepthTex, origPix, vec4(N_floor_view, floorViewZ));
-        imageStore(outTex, origPix, vec4(floor_color * diff, 1.0));
-        foundSurface = true;
+        float floorViewZ = (view * vec4(hit_pos, 1.0)).z;
+        imageStore(outTex, pix, vec4(floor_color * diff, 1.0));
+        imageStore(normalDepthTex, pix, vec4(N_floor_view, floorViewZ));
+    } else { // Background
+        imageStore(normalDepthTex, pix, vec4(1000.0f));
+        imageStore(outTex, pix, vec4(0.1, 0.1, 0.1, 1.0));
     }
-    if(!foundSurface){
-        imageStore(normalDepthTex, origPix, vec4(1000.0f));
-        imageStore(outTex, origPix, vec4(0.1, 0.1, 0.1, 1.0)); // Dark gray background
-        return;
-    }
-    return;
 }

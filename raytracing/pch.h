@@ -54,9 +54,9 @@ using uint = uint32_t;
 
 #define OK 0
 
-// #define WINDOW_WIDTH 1600.0f
-// #define WINDOW_HEIGHT 900.0f
-#define WINDOW_WIDTH 800.0f
-#define WINDOW_HEIGHT 450.0f
+#define WINDOW_WIDTH 1600.0f
+#define WINDOW_HEIGHT 900.0f
+// #define WINDOW_WIDTH 800.0f
+// #define WINDOW_HEIGHT 450.0f
 
 #endif //PCH_H

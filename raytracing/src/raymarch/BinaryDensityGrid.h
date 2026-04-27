@@ -25,6 +25,8 @@ public:
      */
     void fillBDG(AABBc *a, MPMIntegrationSim *mpm);
 
+    void fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const std::vector<glm::mat4>& ani_matrices);
+
     /**
      * Binds all SSBOs from the starting point in uniforms
      * @param start starting index in shader for all ssbos in this class
@@ -55,6 +57,7 @@ private:
     std::vector<unsigned> M;
     std::vector<unsigned> M2;
     std::vector<unsigned> M4;
+    std::vector<float> gridPigments;
 
     /**
      * Estimates the density value for every cell in M in three consequent steps
@@ -64,7 +67,7 @@ private:
     void generateNc(AABBc *a, std::vector<float> &nc);
     void genBuffers();
 
-    GLuint cellsSSBO = 0, idsSSBO = 0, MSSBO = 0, M2SSBO = 0, M4SSBO;
+    GLuint cellsSSBO = 0, idsSSBO = 0, MSSBO = 0, M2SSBO = 0, M4SSBO, pigmentsSSBO = 0;
 };
 
 

@@ -35,8 +35,6 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     if (config_file.is_open()) {
         try {
             nlohmann::json data = nlohmann::json::parse(config_file);
-            pigment_D     = data.value("D", 0.05f);
-            pigment_D_0   = data.value("D_0", 10e-5f);
             pigment_D_max = data.value("D_max", 10e-2f);
             pigment_D_edge0 = data.value("D_edge0", 0.5f);
             pigment_D_edge1 = data.value("D_edge1", 0.8f);
@@ -124,7 +122,7 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::NoSlip)); 
 
     ////// SPATULA
-    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.1, "hehe", g_spatula_anim_path);
+    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.0, "hehe", g_spatula_anim_path);
     spatula_ptr = spatula.get();
     objects.push_back(std::move(spatula));
 

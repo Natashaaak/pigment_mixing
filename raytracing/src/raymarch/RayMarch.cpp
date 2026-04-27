@@ -157,11 +157,14 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     a->fixedAABB(mpm);
     bdg->createVectors(a, mpm);
     bdg->fillBDG(a, mpm);
+    
+    // Pass 1: Set grid data so neighbors can be queried by Classification
     mpm->setGridData(bdg, a);
-    ctimer.end(1);
+    // Pass 2: Generate depth maps & calculate anisotropic matrices
     depthMaps->generateDepthMaps(mpm, ww, wh, camera);
+    // Pass 3: Fill pigment grid using the newly computed anisotropic matrices
+    bdg->fillRenderGrid(mpm, a, depthMaps->getc()->getMatrices());
 
-    // timer.start();
     // }
     glClearTexImage(outputTex, 0, GL_RGBA, GL_FLOAT, floorCol);
     glClearTexImage(normalDepthTex, 0, GL_RGBA, GL_FLOAT, clearData);
@@ -197,6 +200,9 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("maxLevel", state.aa[state.currRes]);
     shader->setUniform("isAni", state.isAni);
     shader->setUniform("showDiffusion", state.showDiffusion);
+    shader->setUniform("showNormals", state.showNormals);
+    shader->setUniform("sigma_color", state.sigma_color);
+    shader->setUniform("sigma_spatial", state.sigma_spatial);
 
     // Bind spatula uniforms
     shader->setUniform("invSpatulaTransform", mpm->getSpatulaInvTransform());

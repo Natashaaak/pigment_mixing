@@ -117,8 +117,6 @@ public:
   T q_prefac  = 1.0 / std::sqrt(2.0); // q = factor * ||dev(tau)||
 
   // Pigment Diffusion Parameters
-  T pigment_D = 0.05;
-  T pigment_D_0 = 10e-5;
   T pigment_D_max = 10e-2;
   T pigment_D_edge0 = 0.5;
   T pigment_D_edge1 = 0.8;

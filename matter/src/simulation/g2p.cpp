@@ -88,9 +88,9 @@ void Simulation::G2P(){
             // Compute the symmetric Rate of Strain tensor S
             TM S = 0.5f * (L + L.transpose());
             float shear_intensity = S.norm();
-            float mix_factor = pigment_D_max * smoothStep(pigment_D_edge0, pigment_D_edge1, shear_intensity);
-            mix_factor = std::max(mix_factor, 0.0f);
+            float mix_factor = smoothStep(pigment_D_edge0, pigment_D_edge1, shear_intensity);
             particles.diffusion_factor[p] = mix_factor;
+            mix_factor = std::max(pigment_D_max * mix_factor, 0.0f);
 
             particles.pigments[p] = (1.0f - mix_factor) * particles.pigments[p] + mix_factor * grid_pigment_p;
         } // end loop p

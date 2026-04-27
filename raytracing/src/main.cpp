@@ -267,7 +267,7 @@ void guiStart(bool &start, std::string &load) {
     static int spatula_anim_idx = 0;
     ImGui::PushItemWidth(bw);
     ImGui::Text("Spatula Animation:");
-    ImGui::Combo("##SpatulaAnim", &spatula_anim_idx, "Squish\0Sweep\0Mixing\0Inf\0\0");
+    ImGui::Combo("##SpatulaAnim", &spatula_anim_idx, "Squish\0Sweep\0Mixing\0Mixing Blobs\0Inf\0\0");
     ImGui::PopItemWidth();
     ImGui::Dummy(ImVec2(0, 10));
 
@@ -319,7 +319,8 @@ void guiStart(bool &start, std::string &load) {
         if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
         else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/animations/spatula_motion_sweep.bin";
         else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/animations/spatula_motion_mixing.bin";
-        else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_inf.bin";
+        else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_blobs.bin";
+        else if (spatula_anim_idx == 4) g_spatula_anim_path = "../matter/animations/spatula_motion_inf.bin";
 
         load = std::string(EXTERNAL_DATA_PATH) + "/Scenes/DamBreakModel.json";
         start = true;
@@ -371,6 +372,14 @@ void gui() {
                 state.iso = state.kern/(h*h*h)*pow(1.0f - q*q, 3);
             }
         }
+        ImGui::Text("vdall:");
+        if (ImGui::SliderFloat("##vdall", &state.vdall, 0.001f, 0.2f, "%.4f")) {
+            if (state.autoISO) {
+                float h = mpm->getSupportRadius();
+                float q = state.vdall/h;
+                state.iso = state.kern/(h*h*h)*pow(1.0f - q*q, 3);
+            }
+        }
         ImGui::BeginDisabled(state.autoISO);
         ImGui::Text("ISO:");
         ImGui::SliderFloat("##ISO", &state.iso, 0.01f, 5000);
@@ -409,11 +418,23 @@ void gui() {
     ImGui::Spacing();
     if (ImGui::CollapsingHeader("Normals blending", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("A factor for normals blending:");
-        ImGui::SliderFloat("##Afactor", &state.A, 0.05f, 1.0f);
+        ImGui::SliderFloat("##Afactor", &state.A, 0.00f, 10.0f);
 
         ImGui::Text("B factor for normals blending:");
-        ImGui::SliderFloat("##Bfactor", &state.B, 0.05f, 1.0f);
+        ImGui::SliderFloat("##Bfactor", &state.B, 0.00f, 10.0f);
 
+    }
+    ImGui::Spacing();
+    ImGui::Spacing();
+    if (ImGui::CollapsingHeader("Depth Map Smoothing", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Filter Radius (R):");
+        ImGui::SliderFloat("##FilterR", &state.R, 1.0f, 32.0f);
+
+        ImGui::Text("Spatial weight (ks):");
+        ImGui::SliderFloat("##FilterKs", &state.ks, 0.1f, 10.0f);
+
+        ImGui::Text("Range weight (kr):");
+        ImGui::SliderFloat("##FilterKr", &state.kr, 0.01f, 2.0f);
     }
     ImGui::Spacing();
     ImGui::Spacing();
@@ -432,6 +453,8 @@ void gui() {
         ImGui::BeginDisabled(!state.isAni);
         ImGui::Text("Anisotropy threshold:");
         ImGui::SliderInt("##Anisotropythreshold", &state.aniso_threshold, 2, 25);
+        ImGui::Text("Anisotropy k (clamping):");
+        ImGui::SliderFloat("##AnisotropyK", &state.k, 0.1f, 10.0f);
         ImGui::EndDisabled();
     }
     ImGui::Spacing();
@@ -447,6 +470,9 @@ void gui() {
     ImGui::Spacing();
     if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("Show Diffusion (Red/Blue)", &state.showDiffusion);
+        ImGui::SliderFloat("Sigma Color", &state.sigma_color, 0.01f, 2.0f);
+        ImGui::SliderFloat("Sigma Spatial", &state.sigma_spatial, 0.01f, 10.0f);
+        ImGui::Checkbox("Show Normals blending (Red/Blue)", &state.showNormals);
     }
     ImGui::Spacing();
     ImGui::Spacing();

@@ -55,7 +55,7 @@ float MPMIntegrationSim::getRadius() {
 }
 
 float MPMIntegrationSim::getSupportRadius() {
-    return sim->dx * 2.0f;  // with using SPLINEDEG 2 kernel, the support radius is 1.5 times the grid cell size
+    return sim->dx * 2.0f;  // with using SPLINEDEG 2 kernel, the support radius is 2 times the grid cell size
 }
 
 std::vector<glm::vec4> &MPMIntegrationSim::recountParticles() {
@@ -141,6 +141,8 @@ void MPMIntegrationSim::moveSpatulaY(T deltaY)
 
 void MPMIntegrationSim::neighborsByIndex(unsigned i, std::vector<unsigned int> &out) {
     out.clear();
+    // Pre-allocate to prevent reallocation overhead during neighbor search.
+    out.reserve(64); 
     float searchRadius = getSupportRadius();
     float searchRadiusSq = searchRadius * searchRadius;
     glm::vec3 posI = glm::vec3(particles[i]);

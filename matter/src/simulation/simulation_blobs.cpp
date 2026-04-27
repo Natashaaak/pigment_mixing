@@ -6,18 +6,18 @@
 
 void Simulation::blobs(const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments) {
     // TEMP for testing purposes
-    ObjectVdb blob_left("../matter/levelsets/Blob_left_rotated.vdb", BC::NoSlip, 0.0, TV(0.0f, 0.0f, 0.0f));
-    ObjectVdb blob_right("../matter/levelsets/Blob_right_rotated.vdb");
-    blob_left.scale = 0.2; blob_right.scale = 0.2;
-    // ObjectVdb blob_left("../matter/levelsets/blobs/Blob_01.vdb");
-    // ObjectVdb blob_right("../matter/levelsets/blobs/Blob_02.vdb");
-    // ObjectVdb blob_right1("../matter/levelsets/blobs/Blob_03.vdb");
-    // ObjectVdb blob_right2("../matter/levelsets/blobs/Blob_04.vdb");
-    // ObjectVdb blob_right3("../matter/levelsets/blobs/Blob_05.vdb");
-    // ObjectVdb blob_right4("../matter/levelsets/blobs/Blob_06.vdb");
-    std::vector<ObjectVdb*> vdb_objects = {&blob_left, &blob_right};
-    sampleParticlesFromVdb(*this, vdb_objects, pigments, 0.01f);
-    return;
+    // ObjectVdb blob_left("../matter/levelsets/Blob_left_rotated.vdb", BC::NoSlip, 0.0, TV(0.0f, 0.0f, 0.0f));
+    // ObjectVdb blob_right("../matter/levelsets/Blob_right_rotated.vdb");
+    // blob_left.scale = 0.2; blob_right.scale = 0.2;
+    // // ObjectVdb blob_left("../matter/levelsets/blobs/Blob_01.vdb");
+    // // ObjectVdb blob_right("../matter/levelsets/blobs/Blob_02.vdb");
+    // // ObjectVdb blob_right1("../matter/levelsets/blobs/Blob_03.vdb");
+    // // ObjectVdb blob_right2("../matter/levelsets/blobs/Blob_04.vdb");
+    // // ObjectVdb blob_right3("../matter/levelsets/blobs/Blob_05.vdb");
+    // // ObjectVdb blob_right4("../matter/levelsets/blobs/Blob_06.vdb");
+    // std::vector<ObjectVdb*> vdb_objects = {&blob_left, &blob_right};
+    // sampleParticlesFromVdb(*this, vdb_objects, pigments, 0.01f);
+    // return;
     // END TEMP
     
     std::vector<std::unique_ptr<ObjectVdb>> vdb_objects_storage;

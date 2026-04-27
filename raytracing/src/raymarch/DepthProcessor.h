@@ -42,6 +42,9 @@ public:
      * @param sh shader
      */
     void bindDall(Shader *sh);
+
+    Classification* getc() const { return c; };
+
 private:
     void genBuffers();
     void initShader();

@@ -1,4 +1,5 @@
 #include "BinaryDensityGrid.h"
+#include <glm/common.hpp>
 
 BinaryDensityGrid::BinaryDensityGrid(AABBc *a, MPMIntegrationSim *mpm) {
     createVectors(a, mpm);
@@ -12,6 +13,10 @@ void BinaryDensityGrid::createVectors(AABBc *a, MPMIntegrationSim *mpm) {
     M.resize(a->getSize(), 0);
     M2.resize((a->cellsX+1)/2 * (a->cellsY+1)/2 * (a->cellsZ+1)/2, 0);
     M4.resize((a->cellsX+4-1)/4 * (a->cellsY+4-1)/4 * (a->cellsZ+4-1)/4, 0);
+    size_t pigX = a->cellsX * 4;
+    size_t pigY = a->cellsY * 4;
+    size_t pigZ = a->cellsZ * 4;
+    gridPigments.resize(pigX * pigY * pigZ * 8, 0); // 8 components for each voxel
 }
 
 void BinaryDensityGrid::fillCells(MPMIntegrationSim *mpm, AABBc *a) {
@@ -48,6 +53,49 @@ void BinaryDensityGrid::fillCells(MPMIntegrationSim *mpm, AABBc *a) {
         unsigned index = cells[id].y + local_appeared;
         ids[index] = i;
     }
+
+    // --- Calculate and print Average PPC for BDG and MPM Grids ---
+    // unsigned int bdg_filled = 0;
+    // unsigned int bdg_total = 0;
+    // unsigned int mpm_filled = 0;
+    // unsigned int mpm_total = 0;
+
+    // float mpm_dx = a->voxelS * 0.5f;
+
+    // #pragma omp parallel for schedule(static) reduction(+:bdg_filled, bdg_total, mpm_filled, mpm_total)
+    // for (int i = 0; i < (int)cells.size(); ++i) {
+    //     unsigned int count = cells[i].x;
+    //     unsigned int offset = cells[i].y;
+    //     if (count > 0) {
+    //         bdg_filled++;
+    //         bdg_total += count;
+
+    //         unsigned int sub_cell_mask = 0;
+    //         for (unsigned int j = 0; j < count; ++j) {
+    //             unsigned int pid = ids[offset + j];
+    //             glm::vec3 pos = glm::vec3(spheresData[pid]);
+    //             glm::vec3 mpm_cell = glm::floor((pos - a->gridStart) / mpm_dx);
+                
+    //             int sub_x = (int)mpm_cell.x & 1;
+    //             int sub_y = (int)mpm_cell.y & 1;
+    //             int sub_z = (int)mpm_cell.z & 1;
+    //             int bit = sub_x | (sub_y << 1) | (sub_z << 2);
+    //             sub_cell_mask |= (1 << bit);
+    //         }
+            
+    //         int bits_set = 0;
+    //         for (int b = sub_cell_mask; b > 0; b >>= 1) {
+    //             bits_set += b & 1;
+    //         }
+    //         mpm_filled += bits_set;
+    //         mpm_total += count;
+    //     }
+    // }
+
+    // float avg_bdg_ppc = bdg_filled > 0 ? (float)bdg_total / bdg_filled : 0.0f;
+    // float avg_mpm_ppc = mpm_filled > 0 ? (float)mpm_total / mpm_filled : 0.0f;
+
+    // debug("Average PPC - BDG Grid: {", avg_bdg_ppc,"}, MPM Grid: {", avg_mpm_ppc, "}");
 }
 
 void BinaryDensityGrid::generateNc(AABBc *a, std::vector<float> &nc) {
@@ -136,6 +184,146 @@ void BinaryDensityGrid::fillBDG(AABBc *a, MPMIntegrationSim *mpm) {
     }
 }
 
+static float mixboxDistance(const std::array<float, 7>& a, const std::array<float, 7>& b) {
+    float sum = 0.0f;
+    for (int c = 0; c < 4; ++c) {
+        float diff = a[c] - b[c];
+        sum += diff * diff;
+    }
+    return std::sqrt(sum); // Euclidean norm of distance 7D vectors
+}
+
+void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const std::vector<glm::mat4>& ani_matrices) {
+    // 1. Vyčistit mřížku (8 floatů na voxel: 7 pro latent, 1 pro váhu)
+    std::fill(gridPigments.begin(), gridPigments.end(), 0.0f);
+
+    const auto& particles_pos = mpm->getParticles(); // spheresData
+    const auto& particles_pig = mpm->getPigments(); // PigmentsBuffer
+
+    float voxelS = a->voxelS / 4.0f;
+    size_t pigX = a->cellsX * 4;
+    size_t pigY = a->cellsY * 4;
+    size_t pigZ = a->cellsZ * 4;
+
+    float sigma_color = state.sigma_color; // Práh citlivosti (laditelný parametr)
+    
+    // FIX 1: Do not multiply by voxelS! The anisotropic matrix G inherently scales the physical 
+    // difference into a normalized space where 1.0 is the boundary.
+    float sigma_spatial = std::max(state.sigma_spatial, 0.001f);
+    sigma_color = std::max(sigma_color, 0.001f);
+
+    // FIX 2: Calculate a much wider search extent. G scales by ~ 1/h. 
+    // As a safe heuristic to cover stretched anisotropic ellipsoids, we search up to 3x the support radius.
+    float max_search_dist = mpm->getSupportRadius() * 3.0f * sigma_spatial;
+    int ext = std::min(12, (int)std::ceil(max_search_dist / voxelS));
+
+    // Temporary grid for Pass 1 (spatial average to find C_voxel)
+    std::vector<float> tempGrid(gridPigments.size(), 0.0f);
+
+    // Pass 1: Compute the spatial average color (C_voxel) for each cell
+    for (int p = 0; p < mpm->getParticleAmount(); ++p) {
+        glm::vec3 pos = glm::vec3(particles_pos[p]);
+        glm::ivec3 base_cell = glm::ivec3(glm::floor((pos - a->gridStart) / voxelS - 0.5f));
+        glm::mat3 G = glm::mat3(ani_matrices[p]);
+
+        for (int dz = -ext; dz <= ext; ++dz) {
+            for (int dy = -ext; dy <= ext; ++dy) {
+                for (int dx = -ext; dx <= ext; ++dx) {
+                    glm::ivec3 cell = base_cell + glm::ivec3(dx, dy, dz);
+
+                    // boundary check
+                    if (cell.x < 0 || cell.y < 0 || cell.z < 0 || 
+                        cell.x >= (int)pigX || cell.y >= (int)pigY || cell.z >= (int)pigZ) continue;
+
+                    size_t idx = (cell.z * pigY * pigX + cell.y * pigX + cell.x) * 8;
+                    
+                    // Calculate Spatial Weight based on distance to voxel center
+                    glm::vec3 voxelCenter = a->gridStart + (glm::vec3(cell) + 0.5f) * voxelS;
+                    glm::vec3 diff = pos - voxelCenter;
+                    
+                    // Apply anisotropy
+                    glm::vec3 l = G * diff;
+                    float spatialDistSq = glm::dot(l, l);
+                    
+                    // Optimization: early exit if distance is safely far beyond sigma standard deviation
+                    if (spatialDistSq > 9.0f * sigma_spatial * sigma_spatial) continue;
+
+                    float w_spatial = std::exp(-spatialDistSq / (sigma_spatial * sigma_spatial));
+
+                    for (int c = 0; c < 7; ++c) {
+                        tempGrid[idx + c] += particles_pig[p][c] * w_spatial;
+                    }
+                    tempGrid[idx + 7] += w_spatial;
+                }
+            }
+        }
+    }
+
+    // Normalize Pass 1 to get final C_voxel
+    for (size_t i = 0; i < tempGrid.size(); i += 8) {
+        float w = tempGrid[i + 7];
+        if (w > 0.0f) {
+            for (int c = 0; c < 7; ++c) tempGrid[i + c] /= w;
+        }
+    }
+
+    // Pass 2: Calculate Bilateral weights and accumulate final voxel colors
+    for (int p = 0; p < mpm->getParticleAmount(); ++p) {
+        glm::vec3 pos = glm::vec3(particles_pos[p]);
+        glm::ivec3 base_cell = glm::ivec3(glm::floor((pos - a->gridStart) / voxelS - 0.5f));
+        glm::mat3 G = glm::mat3(ani_matrices[p]);
+
+        for (int dz = -ext; dz <= ext; ++dz) {
+            for (int dy = -ext; dy <= ext; ++dy) {
+                for (int dx = -ext; dx <= ext; ++dx) {
+                    glm::ivec3 cell = base_cell + glm::ivec3(dx, dy, dz);
+
+                    if (cell.x < 0 || cell.y < 0 || cell.z < 0 || 
+                        cell.x >= (int)pigX || cell.y >= (int)pigY || cell.z >= (int)pigZ) continue;
+
+                    size_t idx = (cell.z * pigY * pigX + cell.y * pigX + cell.x) * 8;
+
+                    std::array<float, 7> p_pig = particles_pig[p];
+                    std::array<float, 7> v_pig;
+                    for (int c = 0; c < 7; ++c) v_pig[c] = tempGrid[idx + c]; // Access C_voxel from Pass 1
+                    
+                    // Získání aktuální barvy ve voxelu pro porovnání (pokud už tam nějaká je)
+                    // Re-calculate Spatial Weight
+                    glm::vec3 voxelCenter = a->gridStart + (glm::vec3(cell) + 0.5f) * voxelS;
+                    glm::vec3 diff = pos - voxelCenter;
+                    
+                    // Apply anisotropy
+                    glm::vec3 l = G * diff;
+                    float spatialDistSq = glm::dot(l, l);
+                    
+                    // Optimization: early exit if distance is safely far beyond sigma standard deviation
+                    if (spatialDistSq > 9.0f * sigma_spatial * sigma_spatial) continue;
+
+                    float w_spatial = std::exp(-spatialDistSq / (sigma_spatial * sigma_spatial));
+
+                    // Calculate W_total = W_spatial * exp(-mixbox_dist^2 / sigma^2)
+                    float colorDist = mixboxDistance(p_pig, v_pig);
+                    float w_total = w_spatial * std::exp(-(colorDist * colorDist) / (sigma_color * sigma_color));
+
+                    // Akumulace
+                    for (int c = 0; c < 7; ++c) {
+                        gridPigments[idx + c] += p_pig[c] * w_total;
+                    }
+                    gridPigments[idx + 7] += w_total;
+                }
+            }
+        }
+    }
+
+    // Normalizace: Vydělit barvy součtem vah
+    for (size_t i = 0; i < gridPigments.size(); i += 8) {
+        float w = gridPigments[i + 7];
+        if (w > 0.0f) {
+            for (int c = 0; c < 7; ++c) gridPigments[i + c] /= w;
+        }
+    }
+}
+
 void BinaryDensityGrid::bindBuffers(unsigned start) {
     //MSSBO: 0
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, MSSBO);
@@ -191,6 +379,11 @@ void BinaryDensityGrid::bindBuffers(unsigned start) {
     M4.size() * sizeof(unsigned),
     M4.data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start+4, M4SSBO);
+
+    //pigmentsSSBO: 5
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, pigmentsSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, gridPigments.size() * sizeof(float), gridPigments.data(), GL_STREAM_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, pigmentsSSBO);
 }
 
 void BinaryDensityGrid::genBuffers() {
@@ -199,6 +392,7 @@ void BinaryDensityGrid::genBuffers() {
     glGenBuffers(1, &M4SSBO);
     glGenBuffers(1, &cellsSSBO);
     glGenBuffers(1, &idsSSBO);
+    glGenBuffers(1, &pigmentsSSBO);
 }
 
 BinaryDensityGrid::~BinaryDensityGrid() {
@@ -207,4 +401,5 @@ BinaryDensityGrid::~BinaryDensityGrid() {
     glDeleteBuffers(1, &M4SSBO);
     glDeleteBuffers(1, &cellsSSBO);
     glDeleteBuffers(1, &idsSSBO);
+    glDeleteBuffers(1, &pigmentsSSBO);
 }

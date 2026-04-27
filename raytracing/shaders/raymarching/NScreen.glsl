@@ -51,6 +51,6 @@ void main(){
     vec3 Py = getViewPos(neighY);
     vec3 dx = Px - currP;
     vec3 dy = Py - currP;
-    vec3 normal = normalize(cross(dy, dx));
+    vec3 normal = normalize(cross(dx, dy));
     imageStore(Nscreen, pix, vec4(normal, 1.0f));
 }
