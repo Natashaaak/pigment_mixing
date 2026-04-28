@@ -153,6 +153,7 @@ uniform bool showDiffusion;
 uniform float sigma_color;
 uniform float sigma_spatial;
 
+uniform bool fullRender;
 uniform mat4 invSpatulaTransform;
 uniform bool has_spatula;
 uniform vec3 spatulaDim;
@@ -166,10 +167,21 @@ float poly6 = 315.0f/(64.0f*pi); //poly6
 float spiky = -45.0f/pi; //first derivative of spiky
 const int MAX_INT = 2147483647;
 
-const vec3 spatula_color = vec3(1.0f, 0.0f, 0.0f);
+const vec3 spatula_color = vec3(0.1f, 0.1f, 0.1f);
 const vec4 floorCol = vec4(0.375f, 0.35f, 0.325f, 1.0f);
 ivec3 cS4 = ivec3(3);
 ivec3 cS2 = ivec3(1);
+
+// --- PBR Materiály a Cook-Torrance BRDF ---
+struct Material {
+    vec3 albedo;
+    float metallic;
+    float roughness;
+};
+
+Material fluidMat = Material(vec3(1.0), 0.0, 0.7);
+Material spatulaMat = Material(vec3(0.8), 0.8, 0.1);
+Material floorMat = Material(vec3(1.0), 0.0, 1.0);
 
 vec3 mix_latent_to_rgb( ParticlePigment pigments) {
     float c[7] = pigments.c;
@@ -671,6 +683,98 @@ vec3 computeNormal(vec3 pij, vec3 xij, ivec2 pix, float depth_from_tex){
     vec3 NObjectij = normalize(mat3(view) * getObjectNormal(xij));
     return normalize(w * NObjectij + (1 - w)*NScreenxij);
 }
+
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+float DistributionGGX(vec3 N, vec3 H, float roughness) {
+    float a = roughness*roughness;
+    float a2 = a*a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH*NdotH;
+    float num = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = pi * denom * denom;
+    return num / denom;
+}
+
+float GeometrySchlickGGX(float NdotV, float roughness) {
+    float r = (roughness + 1.0);
+    float k = (r*r) / 8.0;
+    float num = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
+    return num / denom;
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
+    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+// Analytická aproximace pro BRDF integrační mapu (tzv. Split-Sum approximation)
+vec2 EnvBRDFApprox(float Roughness, float NoV) {
+    vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+    vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+    vec4 r = Roughness * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28 * NoV)) * r.x + r.y;
+    vec2 AB = vec2(-1.04, 1.04) * a004 + r.zw;
+    return AB;
+}
+
+vec3 computePBRLighting(Material mat, vec3 worldPos, vec3 N, vec3 V) {
+    vec3 F0 = vec3(0.04); 
+    F0 = mix(F0, mat.albedo, mat.metallic);
+    float NdotV = max(dot(N, V), 0.0);
+    vec3 Lo = vec3(0.0);
+
+    // Simulace jednoho směrového světla pro hezčí odlesky Cook-Torrance
+    vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
+    vec3 lightColor = vec3(1.5);
+    vec3 L = lightDir;
+    vec3 H = normalize(V + L);
+    float NdotL = max(dot(N, L), 0.0);
+    
+    float NDF = DistributionGGX(N, H, mat.roughness);   
+    float G   = GeometrySmith(N, V, L, mat.roughness);      
+    vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);       
+    
+    vec3 numerator    = NDF * G * F;
+    float denominator = 4.0 * NdotV * NdotL + 0.0001;
+    vec3 specular     = numerator / denominator;
+    
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - mat.metallic;	  
+    Lo += (kD * mat.albedo / pi + specular) * lightColor * NdotL;
+
+    // Ambient IBL
+    vec3 F_ibl = fresnelSchlickRoughness(NdotV, F0, mat.roughness);
+    vec3 kS_ibl = F_ibl;
+    vec3 kD_ibl = (1.0 - kS_ibl) * (1.0 - mat.metallic);
+    
+    vec3 irradiance = texture(irradianceMap, N).rgb;
+    vec3 diffuse_ibl = irradiance * mat.albedo;
+    
+    // Používáme MAX_REFLECTION_LOD = 4.0, z čehož MipMapy vygeneroval HDRLoader
+    const float MAX_REFLECTION_LOD = 4.0;
+    vec3 R = reflect(-V, N);
+    vec3 prefilteredColor = textureLod(hdrMap, R, mat.roughness * MAX_REFLECTION_LOD).rgb;    
+    
+    vec2 envBRDF = EnvBRDFApprox(mat.roughness, NdotV);
+    vec3 specular_ibl = prefilteredColor * (F_ibl * envBRDF.x + envBRDF.y);
+    
+    vec3 ambient = (kD_ibl * diffuse_ibl + specular_ibl);
+    return ambient + Lo;
+}
+
 ///Main ray marching loop that traverses ray into the scene until it finds the surface or no.
 void main(){
     ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
@@ -758,8 +862,18 @@ void main(){
             if(density > iso){
                 vec3 N = computeNormal(ray_mpm.start, pos, pix, depth);
                 vec3 N_world = normalize(mat3(invView) * N);
-                vec3 irradiance = texture(irradianceMap, N_world).rgb;
-                imageStore(outTex, pix, vec4(surfaceColor * irradiance, 1.0f));
+                vec3 V_world = -ray_mpm.dir;
+                
+                vec3 final_color;
+                if (fullRender) {
+                    fluidMat.albedo = surfaceColor;
+                    final_color = computePBRLighting(fluidMat, pos, N_world, V_world);
+                } else {
+                    vec3 irradiance = texture(irradianceMap, N_world).rgb;
+                    final_color = surfaceColor * irradiance;
+                }
+
+                imageStore(outTex, pix, vec4(final_color, 1.0f));
                 imageStore(normalDepthTex, pix, vec4(N, pos.z));
                 return;
             }
@@ -771,9 +885,16 @@ void main(){
         vec3 pos_spatula = ray_vdb.start + ray_vdb.dir * t_env;
         vec3 N = getSpatulaNormal(pos_spatula);
         vec3 N_world = normalize(mat3(invView) * N);
-        vec3 irradiance = texture(irradianceMap, N_world).rgb;
-        vec3 final_spatula_color = spatula_color * irradiance;
+        vec3 V_world = -ray_vdb.dir;
 
+        vec3 final_spatula_color;
+        if (fullRender) {
+            final_spatula_color = computePBRLighting(spatulaMat, pos_spatula, N_world, V_world);
+        } else {
+            vec3 irradiance = texture(irradianceMap, N_world).rgb;
+            final_spatula_color = spatula_color * irradiance;
+        }
+        
         imageStore(outTex, pix, vec4(final_spatula_color, 1.0f));
         float viewZ = (view * vec4(pos_spatula, 1.0)).z;
         imageStore(normalDepthTex, pix, vec4(N, viewZ));
@@ -781,20 +902,31 @@ void main(){
         vec3 hit_pos = ray_vdb.start + t_env * ray_vdb.dir;
         vec3 N_floor = vec3(0.0, 1.0, 0.0);
         vec3 N_floor_view = normalize(mat3(view) * N_floor);
+        vec3 V_world = -ray_vdb.dir;
         
         // Checkerboard pattern
         vec2 checker = floor(hit_pos.xz * 2.0);
         float c = mod(checker.x + checker.y, 2.0);
         vec3 floor_color = floorCol.rgb * (0.8 + c * 0.2);
 
-        vec3 irradiance = texture(irradianceMap, N_floor).rgb;
-        vec3 final_floor_color = floor_color * irradiance;
+        vec3 final_floor_color;
+        if (fullRender) {
+            floorMat.albedo = floor_color;
+            final_floor_color = computePBRLighting(floorMat, hit_pos, N_floor, V_world);
+        } else {
+            vec3 irradiance = texture(irradianceMap, N_floor).rgb;
+            final_floor_color = floor_color * irradiance;
+        }
         
         float floorViewZ = (view * vec4(hit_pos, 1.0)).z;
         imageStore(outTex, pix, vec4(final_floor_color, 1.0));
         imageStore(normalDepthTex, pix, vec4(N_floor_view, floorViewZ));
     } else { // Background
         imageStore(normalDepthTex, pix, vec4(1000.0f));
-        imageStore(outTex, pix, vec4(0.0)); // Plně průhledné pozadí, aby byl vidět skybox za ním
+        if (fullRender) {
+            imageStore(outTex, pix, vec4(0.0)); // Plně průhledné pozadí, aby byl vidět skybox za ním
+        } else {
+            imageStore(outTex, pix, vec4(0.2, 0.2, 0.2, 1.0)); // Jednobarevné pozadí pro preview mód
+        }
     }
 }

@@ -27,6 +27,7 @@ struct State {
     bool autoISO = true;
     bool rayMarch = true;
     bool startMarch = false;
+    bool fullRender = false; // Toggle between preview (Blinn-Phong) and full render (Cook-Torrance + Skybox)
     bool recalcMarchParams = true;
     bool play = true;
     bool changeFontSize = false;

@@ -74,8 +74,6 @@ public:
 
     glm::vec3 getSpatulaDim() const;
 
-    void moveSpatulaY(T deltaY);
-
 private:
     Simulation* sim;
     

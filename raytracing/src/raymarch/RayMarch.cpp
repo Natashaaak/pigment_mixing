@@ -289,6 +289,7 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("showNormals", state.showNormals);
     shader->setUniform("sigma_color", state.sigma_color);
     shader->setUniform("sigma_spatial", state.sigma_spatial);
+    shader->setUniform("fullRender", state.fullRender);
 
     // Bind spatula uniforms
     shader->setUniform("invSpatulaTransform", mpm->getSpatulaInvTransform());
@@ -302,7 +303,10 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
 
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
     
-    renderSkybox(camera);
+    if (state.fullRender) {
+        renderSkybox(camera);
+    }
+    
     renderTex();
     // timer.end();
     // glEndQuery(GL_TIME_ELAPSED);

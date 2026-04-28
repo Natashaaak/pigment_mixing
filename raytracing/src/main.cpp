@@ -106,11 +106,9 @@ void processInput(GLFWwindow *window, int key, int scancode, int action, int mod
         takeScreenshot = !takeScreenshot;
         debug("Take screenshot: ", takeScreenshot);
     }
-    if(key == GLFW_KEY_DOWN && action == GLFW_PRESS){
-        mpm->moveSpatulaY(-0.05f);
-    }
-    if(key == GLFW_KEY_UP && action == GLFW_PRESS){
-        mpm->moveSpatulaY(0.05);
+    if (key == GLFW_KEY_F && action == GLFW_PRESS) {
+        state.fullRender = !state.fullRender;
+        debug("Full render: ", state.fullRender);
     }
 }
 

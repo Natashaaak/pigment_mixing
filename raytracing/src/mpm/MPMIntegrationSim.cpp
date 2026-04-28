@@ -128,17 +128,6 @@ glm::vec3 MPMIntegrationSim::getSpatulaDim() const
     return glm::vec3((float)spatula->halfWidth, (float)spatula->halfThickness, (float)spatula->halfLength);
 }
 
-void MPMIntegrationSim::moveSpatulaY(T deltaY)
-{
-    if (!sim->getSpatulaObject())
-        return;
-
-    auto spatula = sim->getSpatulaObject();
-    Eigen::Transform<T, 3, Eigen::Affine> m = spatula->transform;
-    m.pretranslate(Eigen::Matrix<T, 3, 1>(0.0, deltaY, 0.0)); // pretranslate moves in world-space
-    spatula->updateTransform(m);
-}
-
 void MPMIntegrationSim::neighborsByIndex(unsigned i, std::vector<unsigned int> &out) {
     out.clear();
     // Pre-allocate to prevent reallocation overhead during neighbor search.
