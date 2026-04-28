@@ -10,6 +10,8 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
     // New positions
     Xi += dt * vi; // recall Xi was passed by value
 
+    bool influenced_by_spatula = false;
+
     for(auto& obj : objects) {
         bool colliding = obj->inside(Xi);
         if (colliding) {
@@ -72,6 +74,11 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
 
             vi = v_rel + v_obj;
 
+            // Zaznamenáme, že špachtle ovlivnila částici a má tak přednost
+            if (obj.get() == spatula_ptr) {
+                influenced_by_spatula = true;
+            }
+
             // update velocity copy before next iteration
             vi_orig = vi; // Comment this line to enforce ordering of objects (i.e., use only last object in list)
 
@@ -83,6 +90,11 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
 #ifdef THREEDIM
 
     for (auto& obj : plates) {
+        // Špachtle má PŘEDNOST: pokud částice koliduje se špachtlí, ignorujeme podložku
+        if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
+            continue;
+        }
+
         bool colliding = obj->inside(Xi);
         if (colliding) {
             T vx_rel = vi_orig(0) - obj->vx_object;
@@ -266,6 +278,11 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
 
 
     for (auto& obj : plates) {
+        // Špachtle má PŘEDNOST: pokud částice koliduje se špachtlí, ignorujeme podložku
+        if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
+            continue;
+        }
+        
         bool colliding = obj->inside(Xi);
         if (colliding) {
             T vx_rel = vi_orig(0) - obj->vx_object;

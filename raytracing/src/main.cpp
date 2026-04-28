@@ -230,10 +230,9 @@ void renderSpheres(bool firstRender = false) {
 }
 
 /**
- * Initializes MPM simulation and loads current scene from json file
- * @param name path to the scene file
+ * Initializes MPM simulation
  */
-void physicsInit(const std::string& name) {
+void physicsInit() {
     mpm = new MPMIntegrationSim();
     mpm->setupScene();
 }
@@ -241,10 +240,8 @@ void physicsInit(const std::string& name) {
 /**
  * Main menu gui
  * @param start if user selected to start the scene
- * @param load scene file to load
- * @param scene scene id
  */
-void guiStart(bool &start, std::string &load) {
+void guiStart(bool &start) {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -322,7 +319,6 @@ void guiStart(bool &start, std::string &load) {
         else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_blobs.bin";
         else if (spatula_anim_idx == 4) g_spatula_anim_path = "../matter/animations/spatula_motion_inf.bin";
 
-        load = std::string(EXTERNAL_DATA_PATH) + "/Scenes/DamBreakModel.json";
         start = true;
     }
     ImGui::Dummy(ImVec2(0, 60));
@@ -528,17 +524,16 @@ int mainComputeLoop() {
     timer.init();
     ctimer.init();
     bool startScene = false;
-    std::string load;
     while(!glfwWindowShouldClose(window)) {
         if (startScene)
             timer.update();
         if (!startScene) {
             clearWindow();
 
-            guiStart(startScene, load);
-            if (!load.empty()) {
+            guiStart(startScene);
+            if (startScene) {
                 state.changeFontSize = true;
-                physicsInit(load);
+                physicsInit();
                 a = new AABBc(mpm);
                 rm = new RayMarch(mpm, a);
 

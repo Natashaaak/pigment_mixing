@@ -1,6 +1,7 @@
 #include "RayMarch.h"
 
 #include "PassTimer.h"
+#include "HDRLoader.h"
 
 RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     glGenBuffers(1, &spheresSSBO);
@@ -12,6 +13,9 @@ RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     initShader();
     texQuadInit();
     createOutputTexture();
+    initSkybox();
+    
+    HDRLoader::loadHDRCubemap("data/SkyMap.hdr", hdrTexture, irradianceTexture);
 }
 
 RayMarch::~RayMarch() {
@@ -19,13 +23,22 @@ RayMarch::~RayMarch() {
     delete bdg;
     delete shader;
     delete texShader;
+    delete skyboxShader;
     glDeleteBuffers(1, &spheresSSBO);
     glDeleteBuffers(1, &pigmentsSSBO);
     glDeleteBuffers(1, &diffusionSSBO);
     glDeleteTextures(1, &outputTex);
     glDeleteTextures(1, &normalDepthTex);
+    if (hdrTexture) {
+        glDeleteTextures(1, &hdrTexture);
+    }
+    if (irradianceTexture) {
+        glDeleteTextures(1, &irradianceTexture);
+    }
     glDeleteBuffers(1, &quadVBO);
     glDeleteVertexArrays(1, &quadVAO);
+    glDeleteVertexArrays(1, &skyboxVAO);
+    glDeleteBuffers(1, &skyboxVBO);
 }
 
 void RayMarch::initShader() {
@@ -59,6 +72,57 @@ void RayMarch::texQuadInit() {
     glBindVertexArray(0);
 }
 
+void RayMarch::initSkybox() {
+    float skyboxVertices[] = {
+        // positions          
+        -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f
+    };
+    
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glBindVertexArray(0);
+
+    skyboxShader = new Shader("../shaders/raymarching/skybox.vert", "../shaders/raymarching/skybox.frag");
+}
+
+void RayMarch::renderSkybox(Camera* camera) {
+    if (!hdrTexture) return;
+    
+    // Zkreslíme skybox za všemi ostatními prvky
+    glDepthFunc(GL_LEQUAL); 
+    skyboxShader->use();
+
+    // Odstraníme translaci z matice pohledu, aby se kamera mohla jen otáčet a neutíkala ven z boxu
+    glm::mat4 view = glm::mat4(glm::mat3(camera->getView())); 
+    skyboxShader->setUniform("view", view);
+    skyboxShader->setUniform("projection", camera->getProj());
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, hdrTexture);
+    skyboxShader->setUniform("skybox", 0);
+    
+    glBindVertexArray(skyboxVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+    
+    glDepthFunc(GL_LESS);
+}
 
 void RayMarch::resizeTexutres(GLint ww, GLint wh) {
     glBindTexture(GL_TEXTURE_2D, outputTex);
@@ -134,6 +198,9 @@ void RayMarch::bindSpheres(MPMIntegrationSim *mpm) {
 }
 
 void RayMarch::renderTex() {
+    // Aktivujeme Alpha Blending, aby byl raymarched objekt vidět nad skyboxem
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
 
@@ -147,6 +214,10 @@ void RayMarch::renderTex() {
     glBindVertexArray(quadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
 }
 
 
@@ -166,7 +237,8 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     bdg->fillRenderGrid(mpm, a, depthMaps->getc()->getMatrices());
 
     // }
-    glClearTexImage(outputTex, 0, GL_RGBA, GL_FLOAT, floorCol);
+    const float transparentClear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glClearTexImage(outputTex, 0, GL_RGBA, GL_FLOAT, transparentClear);
     glClearTexImage(normalDepthTex, 0, GL_RGBA, GL_FLOAT, clearData);
     shader->use();
     bindSpheres(mpm);
@@ -176,6 +248,20 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     bdg->bindBuffers(start+1);
 
     depthMaps->bindDepthMaps(2, shader);
+
+    // Bindneme HDR mapu na volny slot 5
+    if (hdrTexture) {
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, hdrTexture);
+        shader->setUniform("hdrMap", 5);
+    }
+    
+    // Bindneme Irradiance mapu na slot 6
+    if (irradianceTexture) {
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceTexture);
+        shader->setUniform("irradianceMap", 6);
+    }
 
     shader->setUniform("width", ww);
     shader->setUniform("height", wh);
@@ -215,6 +301,8 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     glDispatchCompute(groupCountX, groupCountY, 1);
 
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+    
+    renderSkybox(camera);
     renderTex();
     // timer.end();
     // glEndQuery(GL_TIME_ELAPSED);

@@ -1,0 +1,178 @@
+#include "HDRLoader.h"
+#include <spdlog/spdlog.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "../../external/stb_image.h"
+#include <iostream>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include "Shader.h"
+
+void HDRLoader::loadHDRCubemap(const std::string& path, GLuint& envMap, GLuint& irradianceMap) {
+    // OpenGL očekává počátek souřadnic Y dole, proto obrázek při načtení převrátíme
+    stbi_set_flip_vertically_on_load(true);
+    
+    int width, height, nrComponents;
+    // Vynutíme načtení 3 kanálů (RGB), aby se správně zpracovaly i grayscale nebo RGBA obrázky.
+    float* data = stbi_loadf(path.c_str(), &width, &height, &nrComponents, 3);
+    
+    if (!data) {
+        spdlog::error("Failed to load HDR map from path: {} (Reason: {})", path, stbi_failure_reason());
+        envMap = 0;
+        irradianceMap = 0;
+        return;
+    }
+
+    // 1. Nejprve načteme HDR jako klasickou 2D texturu
+    GLuint hdrTexture2D;
+    glGenTextures(1, &hdrTexture2D);
+    glBindTexture(GL_TEXTURE_2D, hdrTexture2D);
+    // Protože jsme vynutili 3 kanály, formát je vždy GL_RGB.
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    stbi_image_free(data);
+
+    // 2. Příprava FBO pro renderování
+    GLuint captureFBO, captureRBO;
+    glGenFramebuffers(1, &captureFBO);
+    glGenRenderbuffers(1, &captureRBO);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 1024, 1024);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
+
+    // 3. Vytvoření prázdné Cubemap textury
+    GLuint envCubemap;
+    glGenTextures(1, &envCubemap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+    for (unsigned int i = 0; i < 6; ++i) {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 1024, 1024, 0, GL_RGB, GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // 4. Načtení shaderu pro převod
+    Shader equirectToCubemapShader("../shaders/raymarching/hdr_to_cubemap.vert", "../shaders/raymarching/hdr_to_cubemap.frag");
+
+    // 5. Geometrie krychle (VAO a VBO)
+    float cubeVertices[] = {
+        -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f
+    };
+    GLuint cubeVAO, cubeVBO;
+    glGenVertexArrays(1, &cubeVAO);
+    glGenBuffers(1, &cubeVBO);
+    glBindVertexArray(cubeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+
+    // 6. Matice pro 6 stran (FOV 90°)
+    glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
+    glm::mat4 captureViews[] = {
+        glm::lookAt(glm::vec3(0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+        glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+        glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
+        glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
+        glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+        glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))
+    };
+
+    // Uložit aktuální stav FBO a Viewport
+    GLint last_viewport[4];
+    glGetIntegerv(GL_VIEWPORT, last_viewport);
+    GLboolean cullFaceEnabled = glIsEnabled(GL_CULL_FACE);
+    
+    glDisable(GL_CULL_FACE);
+    
+    // 7. Spustit render
+    equirectToCubemapShader.use();
+    equirectToCubemapShader.setUniform("equirectangularMap", 0);
+    equirectToCubemapShader.setUniform("projection", captureProjection);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, hdrTexture2D);
+
+    glViewport(0, 0, 1024, 1024);
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    for (unsigned int i = 0; i < 6; ++i) {
+        equirectToCubemapShader.setUniform("view", captureViews[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, envCubemap, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glBindVertexArray(cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Generování Mipmaps pro redukci aliasingu
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+
+    // 8. Vytvoření irradiance mapy
+    GLuint irrMap;
+    glGenTextures(1, &irrMap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, irrMap);
+    for (unsigned int i = 0; i < 6; ++i) {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 32, 32, 0, GL_RGB, GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 32, 32);
+
+    // Načtení shaderu pro irradiance mapu
+    Shader irradianceShader("../shaders/raymarching/hdr_to_cubemap.vert", "../shaders/raymarching/irradiance_convolution.frag");
+
+    irradianceShader.use();
+    irradianceShader.setUniform("environmentMap", 0);
+    irradianceShader.setUniform("projection", captureProjection);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+
+    glViewport(0, 0, 32, 32);
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    for (unsigned int i = 0; i < 6; ++i) {
+        irradianceShader.setUniform("view", captureViews[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, irrMap, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glBindVertexArray(cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // 9. Úklid a návrat původního stavu
+    if (cullFaceEnabled) glEnable(GL_CULL_FACE);
+    glViewport(last_viewport[0], last_viewport[1], last_viewport[2], last_viewport[3]);
+    
+    glDeleteTextures(1, &hdrTexture2D);
+    glDeleteFramebuffers(1, &captureFBO);
+    glDeleteRenderbuffers(1, &captureRBO);
+    glDeleteVertexArrays(1, &cubeVAO);
+    glDeleteBuffers(1, &cubeVBO);
+
+    std::cout << "HDR Cubemap and Irradiance map generated successfully for: " << path << std::endl;
+    
+    envMap = envCubemap;
+    irradianceMap = irrMap;
+}

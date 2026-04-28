@@ -74,7 +74,8 @@ add_executable(GLHydroSurface
     src/raymarch/DepthProcessor.h
     src/raymarch/RayMarch.cpp
     src/raymarch/RayMarch.h
-
+    src/raymarch/HDRLoader.cpp
+    src/raymarch/HDRLoader.h
     src/mixbox/mixbox.h
     src/mixbox/mixbox.cpp
 )

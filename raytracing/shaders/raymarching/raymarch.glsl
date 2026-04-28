@@ -31,9 +31,9 @@ layout(binding = 3) uniform sampler2D Dall;
 
 layout(binding = 4) uniform sampler2D Nscreen;
 
-layout(std430, binding = 10) buffer RenderGrid {
-    float data[]; // 8 floats per pixel
-};
+layout(binding = 5) uniform samplerCube hdrMap;
+
+layout(binding = 6) uniform samplerCube irradianceMap;
 
 // mixbox coefficients, the same as in mixbox.cpp
 const float coefs[20][3] = 
@@ -100,6 +100,10 @@ layout(std430, binding = 9) buffer DiffusionBuffer {
     float p_diffusion[];
 };
 
+layout(std430, binding = 10) buffer RenderGrid {
+    float data[]; // 8 floats per pixel
+};
+
 ///Image width
 uniform int width;
 ///Image height
@@ -161,7 +165,6 @@ const int lcs = 16; //equal to local size
 float poly6 = 315.0f/(64.0f*pi); //poly6
 float spiky = -45.0f/pi; //first derivative of spiky
 const int MAX_INT = 2147483647;
-const vec3 lightDirView = normalize(vec3(1.0f, -1.0f, -1.0f));
 
 const vec3 spatula_color = vec3(1.0f, 0.0f, 0.0f);
 const vec4 floorCol = vec4(0.375f, 0.35f, 0.325f, 1.0f);
@@ -299,7 +302,7 @@ vec3 getSpatulaNormal(vec3 pos_ws) {
     vec3 normal_ws = normalize(transpose(mat3(invSpatulaTransform)) * n_local);
     
     // Transformace do View Space pro lighting
-    return normalize(mat3(view) * -normal_ws);
+    return normalize(mat3(view) * normal_ws);
 }
 
 ///Computes position and direction in the world of the ray
@@ -754,8 +757,9 @@ void main(){
 
             if(density > iso){
                 vec3 N = computeNormal(ray_mpm.start, pos, pix, depth);
-                float diff = max(dot(N, -lightDirView), 0.0);
-                imageStore(outTex, pix, vec4(surfaceColor * diff , 1.0f));
+                vec3 N_world = normalize(mat3(invView) * N);
+                vec3 irradiance = texture(irradianceMap, N_world).rgb;
+                imageStore(outTex, pix, vec4(surfaceColor * irradiance, 1.0f));
                 imageStore(normalDepthTex, pix, vec4(N, pos.z));
                 return;
             }
@@ -766,8 +770,9 @@ void main(){
     if (env_hit_type == 1) { // Spatula
         vec3 pos_spatula = ray_vdb.start + ray_vdb.dir * t_env;
         vec3 N = getSpatulaNormal(pos_spatula);
-        float diff = max(dot(N, lightDirView), 0.0);
-        vec3 final_spatula_color = spatula_color * (diff * 0.8 + 0.2);
+        vec3 N_world = normalize(mat3(invView) * N);
+        vec3 irradiance = texture(irradianceMap, N_world).rgb;
+        vec3 final_spatula_color = spatula_color * irradiance;
 
         imageStore(outTex, pix, vec4(final_spatula_color, 1.0f));
         float viewZ = (view * vec4(pos_spatula, 1.0)).z;
@@ -782,14 +787,14 @@ void main(){
         float c = mod(checker.x + checker.y, 2.0);
         vec3 floor_color = floorCol.rgb * (0.8 + c * 0.2);
 
-        // Use absolute dot product and add ambient light so it doesn't render completely black
-        float diff = abs(dot(N_floor_view, lightDirView)) * 0.7 + 0.3;
+        vec3 irradiance = texture(irradianceMap, N_floor).rgb;
+        vec3 final_floor_color = floor_color * irradiance;
         
         float floorViewZ = (view * vec4(hit_pos, 1.0)).z;
-        imageStore(outTex, pix, vec4(floor_color * diff, 1.0));
+        imageStore(outTex, pix, vec4(final_floor_color, 1.0));
         imageStore(normalDepthTex, pix, vec4(N_floor_view, floorViewZ));
     } else { // Background
         imageStore(normalDepthTex, pix, vec4(1000.0f));
-        imageStore(outTex, pix, vec4(0.1, 0.1, 0.1, 1.0));
+        imageStore(outTex, pix, vec4(0.0)); // Plně průhledné pozadí, aby byl vidět skybox za ním
     }
 }
