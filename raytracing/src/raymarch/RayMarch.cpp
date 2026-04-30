@@ -2,6 +2,9 @@
 
 #include "PassTimer.h"
 #include "HDRLoader.h"
+#include <fstream>
+#include <vector>
+#include "../../../deps/json.hpp"
 
 RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     glGenBuffers(1, &spheresSSBO);
@@ -13,6 +16,7 @@ RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     initShader();
     texQuadInit();
     createOutputTexture();
+    generateBRDFLUT();
     initSkybox();
     
     HDRLoader::loadHDRCubemap("data/SkyMap.hdr", hdrTexture, irradianceTexture);
@@ -35,10 +39,45 @@ RayMarch::~RayMarch() {
     if (irradianceTexture) {
         glDeleteTextures(1, &irradianceTexture);
     }
+    if (brdfLUTTexture) {
+        glDeleteTextures(1, &brdfLUTTexture);
+    }
     glDeleteBuffers(1, &quadVBO);
     glDeleteVertexArrays(1, &quadVAO);
     glDeleteVertexArrays(1, &skyboxVAO);
     glDeleteBuffers(1, &skyboxVBO);
+}
+
+void RayMarch::loadConfig(const std::string& path) {
+    std::ifstream file(path);
+    if (file.is_open()) {
+        try {
+            nlohmann::json j;
+            file >> j;
+            if (j.contains("materials")) {
+                auto& mats = j["materials"];
+                if (mats.contains("fluid")) {
+                    fluidMat.albedo = glm::vec3(mats["fluid"]["albedo"][0], mats["fluid"]["albedo"][1], mats["fluid"]["albedo"][2]);
+                    fluidMat.metallic = mats["fluid"]["metallic"];
+                    fluidMat.roughness = mats["fluid"]["roughness"];
+                }
+                if (mats.contains("spatula")) {
+                    spatulaMat.albedo = glm::vec3(mats["spatula"]["albedo"][0], mats["spatula"]["albedo"][1], mats["spatula"]["albedo"][2]);
+                    spatulaMat.metallic = mats["spatula"]["metallic"];
+                    spatulaMat.roughness = mats["spatula"]["roughness"];
+                }
+                if (mats.contains("floor")) {
+                    floorMat.albedo = glm::vec3(mats["floor"]["albedo"][0], mats["floor"]["albedo"][1], mats["floor"]["albedo"][2]);
+                    floorMat.metallic = mats["floor"]["metallic"];
+                    floorMat.roughness = mats["floor"]["roughness"];
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::error("Error parsing config {}: {}", path, e.what());
+        }
+    } else {
+        spdlog::warn("Could not open config file: {}", path);
+    }
 }
 
 void RayMarch::initShader() {
@@ -122,6 +161,45 @@ void RayMarch::renderSkybox(Camera* camera) {
     glBindVertexArray(0);
     
     glDepthFunc(GL_LESS);
+}
+
+void RayMarch::generateBRDFLUT() {
+    glGenTextures(1, &brdfLUTTexture);
+    glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
+    // Používáme RG formát, protože ukládáme jen parametry A a B (scale a bias pro Fresnel)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, 512, 512, 0, GL_RG, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    GLuint captureFBO, captureRBO;
+    glGenFramebuffers(1, &captureFBO);
+    glGenRenderbuffers(1, &captureRBO);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, brdfLUTTexture, 0);
+
+    GLint last_viewport[4];
+    glGetIntegerv(GL_VIEWPORT, last_viewport);
+    glViewport(0, 0, 512, 512);
+    
+    // Využijeme stejný vertex shader pro full-screen quad jako při běžném vykreslování textury
+    Shader brdfShader("../shaders/raymarching/shader.vert", "../shaders/raymarching/brdf.frag");
+    brdfShader.use();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(last_viewport[0], last_viewport[1], last_viewport[2], last_viewport[3]);
+    
+    glDeleteFramebuffers(1, &captureFBO);
+    glDeleteRenderbuffers(1, &captureRBO);
 }
 
 void RayMarch::resizeTexutres(GLint ww, GLint wh) {
@@ -263,6 +341,13 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
         shader->setUniform("irradianceMap", 6);
     }
 
+    // Bindneme BRDF integrační texturu na slot 7
+    if (brdfLUTTexture) {
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
+        shader->setUniform("brdfLUT", 7);
+    }
+
     shader->setUniform("width", ww);
     shader->setUniform("height", wh);
     shader->setUniform("viewAngle", camera->viewAngle);
@@ -290,6 +375,18 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("sigma_color", state.sigma_color);
     shader->setUniform("sigma_spatial", state.sigma_spatial);
     shader->setUniform("fullRender", state.fullRender);
+
+    shader->setUniform("fluidMat.albedo", fluidMat.albedo);
+    shader->setUniform("fluidMat.metallic", fluidMat.metallic);
+    shader->setUniform("fluidMat.roughness", fluidMat.roughness);
+
+    shader->setUniform("spatulaMat.albedo", spatulaMat.albedo);
+    shader->setUniform("spatulaMat.metallic", spatulaMat.metallic);
+    shader->setUniform("spatulaMat.roughness", spatulaMat.roughness);
+
+    shader->setUniform("floorMat.albedo", floorMat.albedo);
+    shader->setUniform("floorMat.metallic", floorMat.metallic);
+    shader->setUniform("floorMat.roughness", floorMat.roughness);
 
     // Bind spatula uniforms
     shader->setUniform("invSpatulaTransform", mpm->getSpatulaInvTransform());

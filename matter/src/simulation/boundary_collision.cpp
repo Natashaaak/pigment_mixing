@@ -3,7 +3,6 @@
 #include "simulation.hpp"
 
 void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
-
     // Make a copy
     TV vi_orig = vi;
 
@@ -77,6 +76,20 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
             // Zaznamenáme, že špachtle ovlivnila částici a má tak přednost
             if (obj.get() == spatula_ptr) {
                 influenced_by_spatula = true;
+
+                if (Xi(1) < 0.5 * dx) {
+                    // Částice je v pasti u dna
+                    vi = v_obj; 
+                    vi(1) += 0.05 * v_obj.norm(); // Snížili jsme vertikální impuls na 5 %
+                } else {
+                    // Standardní kolize (bezpečnostní nárazník)
+                    // Aplikujeme jej jen tehdy, pokud se částice pohybuje "do" objektu
+                    TV n = obj->normal(Xi);
+                    TV relative_v = vi - v_obj;
+                    if (relative_v.dot(n) < 0) { // Pokud částice míří do špachtle
+                        vi += n * (0.05 * dx / dt); 
+                    }
+                }
             }
 
             // update velocity copy before next iteration

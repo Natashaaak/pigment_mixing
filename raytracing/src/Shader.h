@@ -151,32 +151,62 @@ private:
      * @return string with the file contents
      */
     std::string fileReader(const char* filePath) {
-        std::ifstream file(filePath, std::ios::in | std::ios::binary);
+        std::string resolvedPath = filePath;
+        std::ifstream file(resolvedPath, std::ios::in | std::ios::binary);
 
         // If shader not found, repair path with defined macro from CMake
-        if (!file && std::string(filePath).find("..") != std::string::npos) {
+        if (!file && resolvedPath.find("..") != std::string::npos) {
 #ifdef EXTERNAL_SHADER_PATH
-        // Parse file name
-        std::string originalPath = filePath;
-        size_t pos = originalPath.find("shaders/");
-        std::string relativeSubPath = (pos != std::string::npos) 
-                                      ? originalPath.substr(pos + 8) // +8 skip "shaders/"
-                                      : originalPath;
+            // Parse file name
+            size_t pos = resolvedPath.find("shaders/");
+            std::string relativeSubPath = (pos != std::string::npos) 
+                                          ? resolvedPath.substr(pos + 8) // +8 skip "shaders/"
+                                          : resolvedPath;
 
-        std::string absolutePath = std::string(EXTERNAL_SHADER_PATH) + "/" + relativeSubPath;
-        
-        // Try once again
-        file.open(absolutePath, std::ios::in | std::ios::binary);
+            resolvedPath = std::string(EXTERNAL_SHADER_PATH) + "/" + relativeSubPath;
+            
+            // Try once again
+            file.clear(); // Nutné vyčistit failbit streamu před dalším pokusem o otevření
+            file.open(resolvedPath, std::ios::in | std::ios::binary);
 #endif
-    }
+        }
 
         if (!file) {
-            spdlog::error("File cannot be opened: {}", filePath);
+            spdlog::error("File cannot be opened: {}", resolvedPath);
             throw std::runtime_error("File reading error at shader compilation");
         }
 
+        // Extrahujeme adresář, abychom věděli, kde relativně hledat vkládané soubory
+        std::string directory;
+        size_t lastSlash = resolvedPath.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            directory = resolvedPath.substr(0, lastSlash + 1);
+        }
+
         std::ostringstream contents;
-        contents << file.rdbuf();
+        std::string line;
+        while (std::getline(file, line)) {
+            // Jednoduchý parser pro #include "cesta_k_souboru"
+            size_t includePos = line.find("#include");
+            // Provedeme pouze, pokud radek neobsahuje komentar pred includem
+            if (includePos != std::string::npos && line.find("//") > includePos) {
+                size_t firstQuote = line.find('\"', includePos);
+                size_t secondQuote = line.find('\"', firstQuote + 1);
+                if (firstQuote != std::string::npos && secondQuote != std::string::npos) {
+                    std::string includeFilename = line.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+                    std::string fullIncludePath = directory + includeFilename;
+                    
+                    std::string includedContent = fileReader(fullIncludePath.c_str());
+                    if (includedContent.empty()) {
+                        spdlog::warn("VAROVANI: Vkladany soubor je prazdny nebo nebyl nacten: {}", fullIncludePath);
+                    }
+                    // Rekurzivní volání pro vložení obsahu
+                    contents << includedContent << "\n";
+                    continue;
+                }
+            }
+            contents << line << "\n";
+        }
         file.close();
 
         return contents.str();

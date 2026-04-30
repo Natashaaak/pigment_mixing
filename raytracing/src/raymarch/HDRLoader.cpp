@@ -123,6 +123,63 @@ void HDRLoader::loadHDRCubemap(const std::string& path, GLuint& envMap, GLuint& 
     glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
     glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 
+    // 7.5 Vytvoření a vygenerování prefilter mapy (zrcadlové odlesky)
+    GLuint prefilterMap;
+    glGenTextures(1, &prefilterMap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
+    for (unsigned int i = 0; i < 6; ++i) {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 256, 256, 0, GL_RGB, GL_FLOAT, nullptr);
+        // glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 1024, 1024, 0, GL_RGB, GL_FLOAT, nullptr);    // higher resolution reflection map
+
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    
+    // Alokace paměti pro Mipmapy
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+
+    Shader prefilterShader("../shaders/raymarching/hdr_to_cubemap.vert", "../shaders/raymarching/prefilter.frag");
+    prefilterShader.use();
+    prefilterShader.setUniform("environmentMap", 0);
+    prefilterShader.setUniform("projection", captureProjection);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS); // Zabránění švům na hranách Cubemapy
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    
+    unsigned int maxMipLevels = 5;
+    for (unsigned int mip = 0; mip < maxMipLevels; ++mip) {
+        // Změna Viewportu pro každý Mipmap level (256, 128, 64, 32, 16)
+        unsigned int mipWidth  = 256u >> mip; 
+        unsigned int mipHeight = 256u >> mip;
+        // higher resolution reflection map
+        // unsigned int mipWidth  = 1024 >> mip; 
+        // unsigned int mipHeight = 1024 >> mip;
+        
+        glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, mipWidth, mipHeight);
+        glViewport(0, 0, mipWidth, mipHeight);
+
+        // Nastavení Roughness
+        float roughness = (float)mip / (float)(maxMipLevels - 1);
+        prefilterShader.setUniform("roughness", roughness);
+        
+        for (unsigned int i = 0; i < 6; ++i) {
+            prefilterShader.setUniform("view", captureViews[i]);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, prefilterMap, mip);
+
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glBindVertexArray(cubeVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     // 8. Vytvoření irradiance mapy
     GLuint irrMap;
     glGenTextures(1, &irrMap);
@@ -173,6 +230,7 @@ void HDRLoader::loadHDRCubemap(const std::string& path, GLuint& envMap, GLuint& 
 
     std::cout << "HDR Cubemap and Irradiance map generated successfully for: " << path << std::endl;
     
-    envMap = envCubemap;
+    glDeleteTextures(1, &envCubemap); // Úklid původní mapy - již ji nebudeme potřebovat
+    envMap = prefilterMap; // Ven pošleme rovnou naši prefiltered mapu
     irradianceMap = irrMap;
 }

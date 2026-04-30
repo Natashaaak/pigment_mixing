@@ -534,6 +534,7 @@ int mainComputeLoop() {
                 physicsInit();
                 a = new AABBc(mpm);
                 rm = new RayMarch(mpm, a);
+                rm->loadConfig("../render_config.json");
 
                 renderSpheres(true);
             }
@@ -598,7 +599,7 @@ int main() {
     glm::vec3 camera_pos(0.0f, 1.5f, -2.0f);
     glm::vec3 camera_tgt(0.0f, 0.0f, 0.0f);
 
-    std::ifstream f("../camera_config.json");
+    std::ifstream f("../render_config.json");
     if (f.is_open()) {
         try {
             nlohmann::json data = nlohmann::json::parse(f);
@@ -611,12 +612,12 @@ int main() {
                     camera_data.at("target").get_to(camera_tgt);
                 }
             }
-            spdlog::info("Loaded camera settings from camera_config.json");
+            spdlog::info("Loaded camera settings from render_config.json");
         } catch (const nlohmann::json::exception& e) {
-            spdlog::warn("Error parsing camera_config.json: {}. Using default camera settings.", e.what());
+            spdlog::warn("Error parsing render_config.json: {}. Using default camera settings.", e.what());
         }
     } else {
-        spdlog::info("camera_config.json not found. Using default camera settings.");
+        spdlog::info("render_config.json not found. Using default camera settings.");
     }
 
     camera = new Camera(camera_pos, camera_tgt);
