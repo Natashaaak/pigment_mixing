@@ -20,6 +20,8 @@ RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     initSkybox();
     
     HDRLoader::loadHDRCubemap("data/SkyMap.hdr", hdrTexture, irradianceTexture);
+
+    spatulaMesh = new SpatulaMesh("data/spatula_handler.obj"); // Nebo "../data/spatula_handler.obj" v závislosti na pracovním adresáři
 }
 
 RayMarch::~RayMarch() {
@@ -27,6 +29,7 @@ RayMarch::~RayMarch() {
     delete bdg;
     delete shader;
     delete texShader;
+    delete spatulaShader;
     delete skyboxShader;
     glDeleteBuffers(1, &spheresSSBO);
     glDeleteBuffers(1, &pigmentsSSBO);
@@ -46,6 +49,7 @@ RayMarch::~RayMarch() {
     glDeleteVertexArrays(1, &quadVAO);
     glDeleteVertexArrays(1, &skyboxVAO);
     glDeleteBuffers(1, &skyboxVBO);
+    delete spatulaMesh;
 }
 
 void RayMarch::loadConfig(const std::string& path) {
@@ -61,10 +65,15 @@ void RayMarch::loadConfig(const std::string& path) {
                     fluidMat.metallic = mats["fluid"]["metallic"];
                     fluidMat.roughness = mats["fluid"]["roughness"];
                 }
-                if (mats.contains("spatula")) {
-                    spatulaMat.albedo = glm::vec3(mats["spatula"]["albedo"][0], mats["spatula"]["albedo"][1], mats["spatula"]["albedo"][2]);
-                    spatulaMat.metallic = mats["spatula"]["metallic"];
-                    spatulaMat.roughness = mats["spatula"]["roughness"];
+                if (mats.contains("spatula_metal")) {
+                    spatulaMetal.albedo = glm::vec3(mats["spatula_metal"]["albedo"][0], mats["spatula_metal"]["albedo"][1], mats["spatula_metal"]["albedo"][2]);
+                    spatulaMetal.metallic = mats["spatula_metal"]["metallic"];
+                    spatulaMetal.roughness = mats["spatula_metal"]["roughness"];
+                }
+                if (mats.contains("spatula_wood")) {
+                    spatulaWood.albedo = glm::vec3(mats["spatula_wood"]["albedo"][0], mats["spatula_wood"]["albedo"][1], mats["spatula_wood"]["albedo"][2]);
+                    spatulaWood.metallic = mats["spatula_wood"]["metallic"];
+                    spatulaWood.roughness = mats["spatula_wood"]["roughness"];
                 }
                 if (mats.contains("floor")) {
                     floorMat.albedo = glm::vec3(mats["floor"]["albedo"][0], mats["floor"]["albedo"][1], mats["floor"]["albedo"][2]);
@@ -83,6 +92,7 @@ void RayMarch::loadConfig(const std::string& path) {
 void RayMarch::initShader() {
     shader = new Shader("../shaders/raymarching/raymarch.glsl");
     texShader = new Shader("../shaders/raymarching/shader.vert", "../shaders/raymarching/shader.frag");
+    spatulaShader = new Shader("../shaders/raymarching/spatula.vert", "../shaders/raymarching/spatula.frag");
 }
 
 void RayMarch::texQuadInit() {
@@ -275,27 +285,37 @@ void RayMarch::bindSpheres(MPMIntegrationSim *mpm) {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start + 9, diffusionSSBO);
 }
 
-void RayMarch::renderTex() {
+void RayMarch::renderTex(Camera* camera) {
     // Aktivujeme Alpha Blending, aby byl raymarched objekt vidět nad skyboxem
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
+    
+    // ZMĚNA: Zapneme zápis do depth bufferu pro následnou kompozici meshe
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_ALWAYS); // Vždy přepíšeme hodnoty (raymarching je první v pořadí nad pozadím)
 
     texShader->use();
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, outputTex);
-
     texShader->setUniform("renderedImage", 0);
+
+    // Předáme normalDepthTex, aby si frag shader mohl přečíst pozici a spočítat gl_FragDepth
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, normalDepthTex);
+    texShader->setUniform("normalDepthTex", 1);
+
+    // Matice potřebné pro computeDepth()
+    texShader->setUniform("view", camera->getView());
+    texShader->setUniform("proj", camera->getProj());
 
     glBindVertexArray(quadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
 
     glDisable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS); // Vrátíme zpět na klasické testování hloubky
 }
 
 
@@ -380,9 +400,9 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("fluidMat.metallic", fluidMat.metallic);
     shader->setUniform("fluidMat.roughness", fluidMat.roughness);
 
-    shader->setUniform("spatulaMat.albedo", spatulaMat.albedo);
-    shader->setUniform("spatulaMat.metallic", spatulaMat.metallic);
-    shader->setUniform("spatulaMat.roughness", spatulaMat.roughness);
+    shader->setUniform("spatulaMat.albedo", spatulaMetal.albedo);
+    shader->setUniform("spatulaMat.metallic", spatulaMetal.metallic);
+    shader->setUniform("spatulaMat.roughness", spatulaMetal.roughness);
 
     shader->setUniform("floorMat.albedo", floorMat.albedo);
     shader->setUniform("floorMat.metallic", floorMat.metallic);
@@ -404,7 +424,12 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
         renderSkybox(camera);
     }
     
-    renderTex();
+    renderTex(camera);            // Krok 1: Vykreslí plochu a nastaví gl_FragDepth
+    if (mpm->spatulaExists() && spatulaMesh) {
+        SpatulaMaterial woodMat = {spatulaWood.albedo, spatulaWood.metallic, spatulaWood.roughness};
+        SpatulaMaterial metalMat = {spatulaMetal.albedo, spatulaMetal.metallic, spatulaMetal.roughness};
+        spatulaMesh->render(spatulaShader, mpm->getSpatulaInvTransform(), camera, state.fullRender, hdrTexture, irradianceTexture, brdfLUTTexture, woodMat, metalMat);
+    }
     // timer.end();
     // glEndQuery(GL_TIME_ELAPSED);
 }

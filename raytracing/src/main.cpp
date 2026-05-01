@@ -150,6 +150,7 @@ int createWindow() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_SAMPLES, 4); // Přidání 4x MSAA
     window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "GLHydroSurface", nullptr, nullptr);
     if (window == nullptr) {
         std::cerr << "ERROR: glfw window not created" << std::endl;
@@ -172,6 +173,8 @@ int createWindow() {
         std::cerr << "ERROR: Failed to initialize GLAD" << std::endl;
         return -1;
     }
+
+    glEnable(GL_MULTISAMPLE); // Povolení MSAA
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -560,15 +563,18 @@ int mainComputeLoop() {
     glfwTerminate();
 
     if (takeScreenshot || screenshotsTaken) {
-        std::cout << "Creating animated GIF from screenshots..." << std::endl;
+        std::cout << "Creating video from screenshots..." << std::endl;
         auto now = std::chrono::system_clock::now();
         auto in_time_t = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
         ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S");
         std::string timestamp = ss.str();
-        std::string cmd = "ffmpeg -y -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png " + std::string(outputDir) + "/animation_" + timestamp + ".gif";
+        // Příkaz pro vytvoření MP4 videa s kodekem H.264, který je široce kompatibilní.
+        // -pix_fmt yuv420p je důležitý pro kompatibilitu s většinou přehrávačů.
+        std::string cmd = "ffmpeg -y -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png -c:v libx264 -pix_fmt yuv420p " + std::string(outputDir) + "/animation_" + timestamp + ".mp4";
         int ret = system(cmd.c_str());
         if (ret == 0) {
+            std::cout << "Video created successfully. Deleting PNG sequence..." << std::endl;
             for (const auto& entry : std::filesystem::directory_iterator(outputDir)) {
                 if (entry.path().extension() == ".png") {
                     std::filesystem::remove(entry.path());
@@ -576,7 +582,7 @@ int mainComputeLoop() {
             }
             std::cout << "Screenshots deleted." << std::endl;
         } else {
-            std::cerr << "Failed to create GIF. Make sure ffmpeg is installed on your system." << std::endl;
+            std::cerr << "Failed to create video. Make sure ffmpeg is installed on your system and libx264 is available." << std::endl;
         }
     }
 

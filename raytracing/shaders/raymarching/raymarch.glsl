@@ -774,8 +774,9 @@ void main(){
                     final_color = surfaceColor * irradiance;
                 }
 
+                float viewZ = (view * vec4(pos, 1.0)).z;
                 imageStore(outTex, pix, vec4(final_color, 1.0f));
-                imageStore(normalDepthTex, pix, vec4(N, pos.z));
+                imageStore(normalDepthTex, pix, vec4(N, viewZ));
                 return;
             }
         }

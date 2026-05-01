@@ -76,6 +76,8 @@ add_executable(GLHydroSurface
     src/raymarch/RayMarch.h
     src/raymarch/HDRLoader.cpp
     src/raymarch/HDRLoader.h
+    src/raymarch/SpatulaMesh.cpp
+    src/raymarch/SpatulaMesh.h
     src/mixbox/mixbox.h
     src/mixbox/mixbox.cpp
 )

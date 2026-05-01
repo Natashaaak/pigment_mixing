@@ -128,7 +128,7 @@ void HDRLoader::loadHDRCubemap(const std::string& path, GLuint& envMap, GLuint& 
     glGenTextures(1, &prefilterMap);
     glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
     for (unsigned int i = 0; i < 6; ++i) {
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 256, 256, 0, GL_RGB, GL_FLOAT, nullptr);
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 128, 128, 0, GL_RGB, GL_FLOAT, nullptr);
         // glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 1024, 1024, 0, GL_RGB, GL_FLOAT, nullptr);    // higher resolution reflection map
 
     }
@@ -155,8 +155,8 @@ void HDRLoader::loadHDRCubemap(const std::string& path, GLuint& envMap, GLuint& 
     unsigned int maxMipLevels = 5;
     for (unsigned int mip = 0; mip < maxMipLevels; ++mip) {
         // Změna Viewportu pro každý Mipmap level (256, 128, 64, 32, 16)
-        unsigned int mipWidth  = 256u >> mip; 
-        unsigned int mipHeight = 256u >> mip;
+        unsigned int mipWidth  = 128u >> mip; 
+        unsigned int mipHeight = 128u >> mip;
         // higher resolution reflection map
         // unsigned int mipWidth  = 1024 >> mip; 
         // unsigned int mipHeight = 1024 >> mip;

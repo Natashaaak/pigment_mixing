@@ -35,3 +35,5 @@ CMakeFiles/
 cmake_install.cmake
 Makefile
 log.log
+
+.VSCodeCounter/
