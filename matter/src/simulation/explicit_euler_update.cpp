@@ -11,6 +11,8 @@ void Simulation::explicitEulerUpdate(){
 
     #pragma omp parallel for num_threads(n_threads)
     for(int p = 0; p < Np; p++){
+        if (!particles.active[p]) continue;
+
         const auto &pn = p_neighbors[p];
         int count = 0;
 

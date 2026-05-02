@@ -31,7 +31,18 @@ public:
     GLuint getVBO() const { return vbo; }
     const std::vector<MaterialGroup>& getGroups() const { return groups; }
 
-    void render(Shader* shader, const glm::mat4& invSpatulaTransform, Camera* camera, bool fullRender, GLuint hdrTexture, GLuint irradianceTexture, GLuint brdfLUTTexture, const SpatulaMaterial& woodMat, const SpatulaMaterial& metalMat) const;
+    void render(
+        Shader* shader, 
+        const glm::mat4& invSpatulaTransform, 
+        Camera* camera, 
+        bool fullRender, 
+        GLuint hdrTexture, 
+        GLuint irradianceTexture, 
+        GLuint brdfLUTTexture, 
+        const SpatulaMaterial& woodMat, 
+        const SpatulaMaterial& metalMat, 
+        const glm::vec3 lightDirs[2], 
+        const glm::vec3 lightColors[2]) const;
 
 private:
     void loadOBJ(const std::string& path);

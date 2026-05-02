@@ -23,6 +23,8 @@ void Simulation::G2P(){
 
         #pragma omp for nowait
         for(int p = 0; p < Np; p++){
+            if (!particles.active[p]) continue;
+
             const auto &pn = p_neighbors[p];
             int count = 0;
             TV xp = particles.x[p];

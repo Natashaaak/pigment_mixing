@@ -314,6 +314,7 @@ void Simulation::checkMomentumConservation(){
 
     TV momentum_particle = TV::Zero();
     for(int p=0; p<Np; p++){
+        if (!particles.active[p]) continue;
         momentum_particle += particle_mass * particles.v[p];
     }
     debug("               Total part momentum = ", momentum_grid.norm());
@@ -327,7 +328,11 @@ void Simulation::checkMomentumConservation(){
 }
 
 void Simulation::checkMassConservation(){
-    T particle_mass_total = particle_mass*Np;
+    unsigned int active_particles = 0;
+    for(int p=0; p<Np; p++){
+        if (particles.active[p]) active_particles++;
+    }
+    T particle_mass_total = particle_mass * active_particles;
     T grid_mass_total = 0;
     for(auto&& m: grid.mass)
         grid_mass_total += m;

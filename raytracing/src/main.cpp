@@ -42,10 +42,10 @@ bool screenshotsTaken = false;
 extern std::string g_spatula_anim_path;
 int g_num_colors = 2;
 float g_colors[4][3] = {
-    {1.0f, 0.7882f, 0.0f}, // Yellow
-    {0.2353f, 0.2275f, 0.3451f}, // Blue
-    {0.9765f, 0.9804f, 0.9686f}, // White
-    {0.4353f, 0.2196f, 0.2588f}  // Magenta
+    {0.959123f, 0.802565f, 0.0356184f}, // Yellow
+    {0.0771705f, 0.0282698f, 0.24833f}, // Blue
+    {0.995181f, 0.999781f, 0.997048f}, // White
+    {0.506f, 0.012f, 0.184f}  // Magenta
 };
 float g_ratios[4] = { 0.5f, 0.5f, 0.0f, 0.0f };
 
@@ -189,14 +189,19 @@ int createWindow() {
     return OK;
 }
 
+static double frame_sim_time_ms = 0.0;
+
 /**
  * Performs one simulation step if simulation is unpaused
  */
 void sim() {
     if (state.play) {
+        auto start = std::chrono::high_resolution_clock::now();
         ctimer.start(0);
         mpm->simStep();
         ctimer.end(0);
+        auto end = std::chrono::high_resolution_clock::now();
+        frame_sim_time_ms += std::chrono::duration<double, std::milli>(end - start).count();
         // ctimer.start(3);
         // ctimer.end(3);
     }
@@ -215,6 +220,11 @@ void clearWindow() {
  */
 void renderSpheres(bool firstRender = false) {
     if(!firstRender && !mpm->isTimeToRender() && state.play) return;
+
+    if (state.play && !firstRender) {
+        std::cout << "\nSnímek nasimulován za: " << frame_sim_time_ms << " ms" << std::endl;
+        frame_sim_time_ms = 0.0;
+    }
 
     clearWindow();
     mpm->recountParticles();
@@ -265,7 +275,7 @@ void guiStart(bool &start) {
     static int spatula_anim_idx = 0;
     ImGui::PushItemWidth(bw);
     ImGui::Text("Spatula Animation:");
-    ImGui::Combo("##SpatulaAnim", &spatula_anim_idx, "Squish\0Sweep\0Mixing\0Mixing Blobs\0Inf\0\0");
+    ImGui::Combo("##SpatulaAnim", &spatula_anim_idx, "Mixing Blobs\0Squish\0Sweep\0Mixing\0Inf\0\0");
     ImGui::PopItemWidth();
     ImGui::Dummy(ImVec2(0, 10));
 
@@ -314,10 +324,10 @@ void guiStart(bool &start) {
     ImGui::Dummy(ImVec2(0, 20));
 
     if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
-        if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
+        if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion_blobs.bin";
         else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/animations/spatula_motion_sweep.bin";
         else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/animations/spatula_motion_mixing.bin";
-        else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_blobs.bin";
+        else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
         else if (spatula_anim_idx == 4) g_spatula_anim_path = "../matter/animations/spatula_motion_inf.bin";
 
         start = true;
@@ -510,14 +520,6 @@ void gui() {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
-namespace glm {
-    void from_json(const nlohmann::json& j, vec3& v) {
-        j.at(0).get_to(v.x);
-        j.at(1).get_to(v.y);
-        j.at(2).get_to(v.z);
-    }
-}
-
 int mainComputeLoop() {
     int fbW, fbH;
     glfwGetFramebufferSize(glfwGetCurrentContext(), &fbW, &fbH);
@@ -605,22 +607,31 @@ int main() {
     glm::vec3 camera_pos(0.0f, 1.5f, -2.0f);
     glm::vec3 camera_tgt(0.0f, 0.0f, 0.0f);
 
-    std::ifstream f("../render_config.json");
+    std::string config_path = "../render_config.json";
+    std::ifstream f(config_path);
+    if (!f.is_open()) {
+        config_path = "render_config.json"; // Fallback pokud program běží mimo build složku
+        f.open(config_path);
+    }
+
     if (f.is_open()) {
         try {
-            nlohmann::json data = nlohmann::json::parse(f);
+            nlohmann::json data;
+            f >> data;
             if (data.contains("camera")) {
                 auto& camera_data = data.at("camera");
                 if (camera_data.contains("position")) {
-                    camera_data.at("position").get_to(camera_pos);
+                    auto& pos = camera_data.at("position");
+                    camera_pos = glm::vec3(pos[0].get<float>(), pos[1].get<float>(), pos[2].get<float>());
                 }
                 if (camera_data.contains("target")) {
-                    camera_data.at("target").get_to(camera_tgt);
+                    auto& tgt = camera_data.at("target");
+                    camera_tgt = glm::vec3(tgt[0].get<float>(), tgt[1].get<float>(), tgt[2].get<float>());
                 }
             }
-            spdlog::info("Loaded camera settings from render_config.json");
-        } catch (const nlohmann::json::exception& e) {
-            spdlog::warn("Error parsing render_config.json: {}. Using default camera settings.", e.what());
+            spdlog::info("Loaded camera settings from {}: pos({}, {}, {})", config_path, camera_pos.x, camera_pos.y, camera_pos.z);
+        } catch (const std::exception& e) {
+            spdlog::warn("Error parsing {}: {}. Using default camera settings.", config_path, e.what());
         }
     } else {
         spdlog::info("render_config.json not found. Using default camera settings.");

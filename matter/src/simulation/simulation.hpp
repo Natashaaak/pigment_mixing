@@ -52,8 +52,8 @@ public:
   TV gravity = TV::Zero();
 
   bool use_particle_boundaries = false;
-  TV particle_boundary_min = -10.0 * TV::Ones();
-  TV particle_boundary_max =  10.0 * TV::Ones();
+  TV particle_boundary_min = -5.0 * TV::Ones();
+  TV particle_boundary_max =  5.0 * TV::Ones();
 
   T min_dt = 1e-14; // minimum dt, also used to check  end of frame, use with caution
   T fps = 1; // frames per second

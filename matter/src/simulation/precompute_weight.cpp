@@ -5,6 +5,7 @@ void Simulation::precomputeWeights() {
 
     #pragma omp parallel for num_threads(n_threads)
     for(int p = 0; p < Np; p++) {
+        if (!particles.active[p]) continue;
         TV xp = particles.x[p];
         
         // 1. Spočítat báze (jen jednou!)
@@ -12,9 +13,14 @@ void Simulation::precomputeWeights() {
         int j_base = std::floor((xp(1)-grid.yc)*one_over_dx) - 1;
         p_neighbors[p].base_index[0] = std::max(0, i_base);
         p_neighbors[p].base_index[1] = std::max(0, j_base);
+
+        // p_neighbors[p].base_index[0] = std::max(0, std::min(i_base, (int)Nx - 4));
+        // p_neighbors[p].base_index[1] = std::max(0, std::min(j_base, (int)Ny - 4));
 #ifdef THREEDIM
         int k_base = std::floor((xp(2)-grid.zc)*one_over_dx) - 1;
         p_neighbors[p].base_index[2] = std::max(0, k_base);
+
+        // p_neighbors[p].base_index[2] = std::max(0, std::min(k_base, (int)Nz - 4));
 #endif
 
         // 2. Spočítat všechny váhy v jednom bloku

@@ -15,6 +15,7 @@ void Simulation::deformationUpdate(){
 
     #pragma omp parallel for reduction(+:plastic_count) num_threads(n_threads)
     for(int p=0; p<Np; p++){
+        if (!particles.active[p]) continue;
 
         TM sum = TM::Zero();
         TV xp = particles.x[p];

@@ -168,6 +168,9 @@ const vec3 floorCol = vec3(0.375f, 0.375f, 0.375f);
 ivec3 cS4 = ivec3(3);
 ivec3 cS2 = ivec3(1);
 
+uniform vec3 lightDirs[2];
+uniform vec3 lightColors[2];
+
 #include "pbr_lighting.glsl"
 
 uniform Material fluidMat;
@@ -199,7 +202,24 @@ vec3 mix_latent_to_rgb( ParticlePigment pigments) {
     return clamp(rgb + vec3(c[4], c[5], c[6]), 0.0, 1.0);
 }
 
-float sdSpatula(vec3 p) {
+float sdCylinder(vec3 p, float r, float h) {
+    vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(r, h);
+    return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+}
+
+vec2 rotateZ(vec2 v, float a) {
+    float s = sin(a);
+    float c = cos(a);
+    return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
+vec2 rotateY(vec2 v, float a) {
+    float s = sin(a);
+    float c = cos(a);
+    return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
+float sdSpatula(vec3 p, bool with_handle) {
     float b1 = spatulaDim.x;           // Spodní šířka (poloměr)
     float b2 = spatulaDim.x * 0.25;    // Horní šířka (poloměr)
     float he = spatulaDim.z;           // Polovina výšky (Z)
@@ -239,8 +259,25 @@ float sdSpatula(vec3 p) {
     }
 
     // 5. Extruze
-    float d_y = abs(p.y) - halfThickness;
-    return max(d_2d, d_y);
+    float d_y = abs(p.y + 0.01) - halfThickness;
+    float d_blade = max(d_2d, d_y);
+
+    if (!with_handle) return d_blade;
+
+    // Válce rukojeti (využíváme inverzní rotace)
+    vec3 p_handle = p;
+    p_handle.xz = rotateY(p_handle.xz, 90.0 * pi / 180.0); // Inverzní rotace
+
+    vec3 p_cyl1 = p_handle - vec3(5.62, 1.76, 0.0);
+    p_cyl1.xy = rotateZ(p_cyl1.xy, -105.19 * pi / 180.0);
+    float d_cyl1 = sdCylinder(p_cyl1, 0.536 * 0.5, 5.0 * 0.5);
+
+    vec3 p_cyl2 = p_handle - vec3(2.19, 0.59, 0.0);
+    p_cyl2.xy = rotateZ(p_cyl2.xy, 62.0 * pi / 180.0);
+    float d_cyl2 = sdCylinder(p_cyl2, 0.131 * 0.5, 2.293 * 0.5);
+
+    // Sjednocení geometrie (Union)
+    return min(d_blade, min(d_cyl1, d_cyl2));
 }
 
 bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
@@ -255,9 +292,9 @@ bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
     vec3 invDir = 1.0 / (dir_local + sign(dir_local) * 1e-9);
     vec3 paddingT = vec3(0.05); // 5 cm reserve
     
-    // Bounding box must encompass the top and bottom half-circles!
-    vec3 boxMin = vec3(-spatulaDim.x, -spatulaDim.y, -spatulaDim.z - 1.5 * spatulaDim.x);
-    vec3 boxMax = vec3( spatulaDim.x,  spatulaDim.y,  spatulaDim.z + spatulaDim.x * 0.25);
+    // Bounding box must encompass the blade and the new handle cylinders!
+    vec3 boxMin = vec3(-spatulaDim.x - 9.0, -spatulaDim.y - 2.0, -spatulaDim.z - 9.0);
+    vec3 boxMax = vec3( spatulaDim.x + 9.0,  5.0,  spatulaDim.z + 9.0);
     
     vec3 t0 = (boxMin - paddingT - origin) * invDir; // Lower bound of the box
     vec3 t1 = (boxMax + paddingT - origin) * invDir; // Upper bound of the box
@@ -271,11 +308,13 @@ bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
 
     // 2. Sphere Tracing uvnitř Bounding Boxu
     float t = max(0.0, t_near - 0.001); // mírný posun vzad pro jistotu zachycení hrany
-    for(int i = 0; i < 128; i++) {
+    int max_iter = fullRender ? 128 : 40;
+    float hit_threshold = fullRender ? 0.0001 : 0.002;
+    for(int i = 0; i < max_iter; i++) {
         vec3 p_local = origin + dir_local * t;
-        float dist = sdSpatula(p_local);
+        float dist = sdSpatula(p_local, false);
 
-        if(dist < 0.0001) { // Povrch nalezen
+        if(dist < hit_threshold) { // Povrch nalezen
             t_hit = t / dir_len; // Převod vzdálenosti zpět do World Space
             hit_pos = ray.start + ray.dir * t_hit;
             return true;
@@ -295,9 +334,9 @@ vec3 getSpatulaNormal(vec3 pos_ws) {
     // Gradient - Epsilon (e.x) musí být vždy menší než celková tloušťka objektu!
     vec2 e = vec2(0.00005, 0.0);
     vec3 n_local = normalize(vec3(
-        sdSpatula(p_local + e.xyy) - sdSpatula(p_local - e.xyy),
-        sdSpatula(p_local + e.yxy) - sdSpatula(p_local - e.yxy),
-        sdSpatula(p_local + e.yyx) - sdSpatula(p_local - e.yyx)
+        sdSpatula(p_local + e.xyy, false) - sdSpatula(p_local - e.xyy, false),
+        sdSpatula(p_local + e.yxy, false) - sdSpatula(p_local - e.yxy, false),
+        sdSpatula(p_local + e.yyx, false) - sdSpatula(p_local - e.yyx, false)
     ));
     
     // Transformace normály zpět do World Space
@@ -606,11 +645,122 @@ float computeDensity(vec3 pos, vec3 ray_start, float depth, ivec2 pix, out vec3 
             float w = min(w1 * w2, 1.0f);
             outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), w);
         } else {
-            outColor = computeFilteredColor(pos);
+            if (fullRender) {
+                outColor = computeFilteredColor(pos);
+            } else {
+                outColor = found_closest ? mix_latent_to_rgb(p_pigments[closest_id]) : vec3(0.8);
+            }
         }
     }
     return density;
 }
+
+/// Odlehčená verze výpočtu hustoty čistě pro stínové volumetrické paprsky (bez barvy)
+float computeDensityOnly(vec3 pos, float radius_scale){
+    float density = 0.0f;
+    ivec3 cell = ivec3(floor((pos - gridStart) / voxelSize));
+    
+    // Zvětšíme oblast hledání, pokud je stínový kužel široký (zachytíme i zvětšené částice)
+    int ext = radius_scale > 1.5 ? 2 : 1;
+    
+    for(int x = -ext; x <= ext; x++){
+        for(int y = -ext; y <= ext; y++){
+            for(int z = -ext; z <= ext; z++){
+                ivec3 currCell = cell + ivec3(x, y, z);
+                bvec3 outOfBoundsGreat = greaterThanEqual(currCell, cellsSize);
+                bvec3 outOfBoundsLess = lessThan(currCell, ivec3(0));
+                if(any(outOfBoundsGreat) || any(outOfBoundsLess)) continue;
+                
+                uint cellId = currCell.x + cellsSize.x * (currCell.z * cellsSize.y + currCell.y);
+                uvec2 cellData = cellsData[cellId];
+                uint amount = cellData.x;
+                uint offset = cellData.y;
+                for(uint i = 0; i < amount; i++){
+                    uint sphereID = ids[offset + i];
+                    vec4 sphere = spheresData[sphereID];
+                    vec3 d = pos - sphere.xyz;
+                    float r = length(d) / radius_scale; // Umělé zvětšení poloměru částice pro širší vzorkování
+                    float compare = h;
+                    float hr2 = h*h - r*r;
+                    float w = 1.0f;
+                    if(isAni){
+                        vec3 d_ani = mat3(an[sphereID]) * d;
+                        r = dot(d_ani, d_ani) / (radius_scale * radius_scale);
+                        compare = 1.0f;
+                        hr2 = 1.0f - r;
+                        w *= dets[sphereID];
+                    }
+                    if(r > compare) continue;
+                    w *= poly6 * hr2 * hr2 * hr2;
+                    // Zachování celkové hmotnosti vydělením novým objemem (scale^3)
+                    density += w / (radius_scale * radius_scale * radius_scale);
+                }
+            }
+        }
+    }
+    return density;
+}
+
+float calcFluidShadow(vec3 ro, vec3 rd, float maxt) {
+    float res = 1.0;
+    float t = 0.1; // Větší offset pro začátek, aby bloby nestínily samy sebe
+    float k = 4.0; // Hodnota k pro bloby (zkus rozmezí 2.0 až 6.0)
+
+    for(int i = 0; i < 40 && t < maxt; i++) {
+        vec3 p = ro + rd * t;
+        // Vzorkujeme hustotu s radius_scale = 1.0
+        float dens = computeDensityOnly(p, 1.0);
+        
+        if (dens > 0.001) {
+            // KLÍČ: Místo binárního testu vytvoříme lineární rampu
+            // Pokud je dens >= iso, d = 0 (úplný stín).
+            // Pokud je dens < iso, d roste (polostín).
+            float d = clamp((iso - dens) / iso, 0.0, 1.0);
+            
+            res = min(res, k * d / t);
+            
+            // Pokud jsme hluboko uvnitř (vysoká hustota), končíme
+            if(dens > iso * 1.2) return 0.0;
+        }
+        
+        if(res < 0.01) return 0.0;
+
+        // Pro mřížku je důležitý malý krok, aby paprsek neminul okraje
+        t += voxelSize * 0.7; 
+    }
+    return clamp(res, 0.0, 1.0);
+}
+
+/// Vypočítá měkký SDF stín pro špachtli a její rukojeť
+float calcSpatulaShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
+    if (!has_spatula) return 1.0;
+    
+    float res = 1.0;
+    float t = mint;
+    vec3 dir_local = (invSpatulaTransform * vec4(rd, 0.0)).xyz;
+    float dir_len = length(dir_local);
+    
+    for(int i = 0; i < 64 && t < maxt; i++) {
+        vec3 p = ro + rd * t;
+        vec3 p_local = (invSpatulaTransform * vec4(p, 1.0)).xyz;
+        float d = sdSpatula(p_local, true);
+        float d_world = d / dir_len;
+        
+        if(d_world < 0.001) return 0.0; // Paprsek narazil do špachtle
+        
+        res = min(res, k * d_world / t);
+        t += clamp(d_world, 0.01, 0.2); // Dynamický krok
+    }
+    return clamp(res, 0.0, 1.0);
+}
+
+float calcShadow(vec3 ro, vec3 rd) {
+    float maxt = 10.0; // Maximální vzdálenost stínování
+    float spatShadow = calcSpatulaShadow(ro, rd, 0.05, maxt, 16.0); // k=16 pro měkký penumbra okraj
+    float fluidShadow = calcFluidShadow(ro, rd, maxt);
+    return spatShadow * fluidShadow;
+}
+
 ///Computes object normal using spiky kern
 vec3 getObjectNormal(vec3 xij){
     vec3 grad = vec3(0);
@@ -660,6 +810,11 @@ vec3 getObjectNormal(vec3 xij){
 vec3 computeNormal(vec3 pij, vec3 xij, ivec2 pix, float depth_from_tex){
     float realDepth = (view * vec4(xij, 1.0)).z;
     vec3 NScreenxij = texelFetch(Nscreen, pix, 0).xyz;
+    
+    if (!fullRender) {
+        return NScreenxij; // Extrémní zrychlení pro preview: použije se pouze normála z depth bufferu
+    }
+    
     // cekch discontinuity
     if (abs(abs(realDepth) - depth_from_tex) > h * 0.5) {
         return normalize(mat3(view) * getObjectNormal(xij));
@@ -673,6 +828,11 @@ vec3 computeNormal(vec3 pij, vec3 xij, ivec2 pix, float depth_from_tex){
     }
     vec3 NObjectij = normalize(mat3(view) * getObjectNormal(xij));
     return normalize(w * NObjectij + (1 - w)*NScreenxij);
+}
+
+// Jednoduchá pseudonáhodná funkce
+float rand(vec2 co) {
+    return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 ///Main ray marching loop that traverses ray into the scene until it finds the surface or no.
@@ -706,8 +866,11 @@ void main(){
     // 2. Intersect Floor
     float t_floor = 1e6;
     bool hit_floor = false;
-    if (ray_vdb.dir.y < 0.0) {
-        float temp_t = (gridStart.y - ray_vdb.start.y) / ray_vdb.dir.y;
+    // Kontrola, že paprsek míří směrem dolů k podlaze
+    if (ray_vdb.dir.y < -0.0001) {
+        // Zde můžeš upravit výšku podlahy. Např. + 0.05 ji zvedne o 5 cm
+        float floor_height = gridStart.y + 0.08; 
+        float temp_t = (floor_height - ray_vdb.start.y) / ray_vdb.dir.y;
         if (temp_t > 0.0) {
             t_floor = temp_t;
             hit_floor = true;
@@ -764,18 +927,29 @@ void main(){
                 vec3 N_world = normalize(mat3(invView) * N);
                 vec3 V_world = -ray_mpm.dir;
                 
+                float shadows[2] = {1.0, 1.0};
+                if (fullRender) {
+                    for(int s = 0; s < 2; s++) {
+                        shadows[s] = calcShadow(pos, normalize(lightDirs[s]));
+                    }
+                }
+                
                 vec3 final_color;
+                // Zvýšení základního jasu barvy (albeda)
+                float brightnessBoost = 2.5; 
                 if (fullRender) {
                     Material fluidMat_colored = fluidMat;
-                    fluidMat_colored.albedo = surfaceColor;
-                    final_color = computePBRLighting(fluidMat_colored, pos, N_world, V_world);
+                    fluidMat_colored.albedo = clamp(surfaceColor * brightnessBoost, 0.0, 1.0);
+                    final_color = computePBRLighting(fluidMat_colored, pos, N_world, V_world, lightDirs, lightColors, shadows);
+                    // Přidání trochy extra fixního ambientního světla pro prosvětlení tmavých záhybů ve stínu
+                    final_color += surfaceColor * 0.15;
                 } else {
                     vec3 irradiance = texture(irradianceMap, N_world).rgb;
-                    final_color = surfaceColor * irradiance;
+                    final_color = clamp(surfaceColor * brightnessBoost, 0.0, 1.0) * irradiance;
                 }
 
                 float viewZ = (view * vec4(pos, 1.0)).z;
-                imageStore(outTex, pix, vec4(final_color, 1.0f));
+                imageStore(outTex, pix, vec4(final_color, 10.0f)); // 10.0f slouží jako tag pro tekutinu
                 imageStore(normalDepthTex, pix, vec4(N, viewZ));
                 return;
             }
@@ -788,16 +962,23 @@ void main(){
         vec3 N = getSpatulaNormal(pos_spatula);
         vec3 N_world = normalize(mat3(invView) * N);
         vec3 V_world = -ray_vdb.dir;
+        
+        float shadows[2] = {1.0, 1.0};
+        if (fullRender) {
+            for(int s = 0; s < 2; s++) {
+                shadows[s] = calcShadow(pos_spatula, normalize(lightDirs[s]));
+            }
+        }
 
         vec3 final_spatula_color;
         if (fullRender) {
-            final_spatula_color = computePBRLighting(spatulaMat, pos_spatula, N_world, V_world);
+            final_spatula_color = computePBRLighting(spatulaMat, pos_spatula, N_world, V_world, lightDirs, lightColors, shadows);
         } else {
             vec3 irradiance = texture(irradianceMap, N_world).rgb;
             final_spatula_color = spatula_color * irradiance;
         }
         
-        imageStore(outTex, pix, vec4(final_spatula_color, 1.0f));
+        imageStore(outTex, pix, vec4(final_spatula_color, 10.0f)); // 10.0f slouží jako tag pro špachtli
         float viewZ = (view * vec4(pos_spatula, 1.0)).z;
         imageStore(normalDepthTex, pix, vec4(N, viewZ));
     } else if (env_hit_type == 2) { // Floor
@@ -810,24 +991,34 @@ void main(){
         vec2 checker = floor(hit_pos.xz * 2.0);
         float c = mod(checker.x + checker.y, 2.0);
         vec3 floor_color = floorCol.rgb * (0.8 + c * 0.2);
+        
+        float shadows[2] = {1.0, 1.0};
+        if (fullRender) {
+            for(int s = 0; s < 2; s++) {
+                float rnd = rand(vec2(pix.x + s * 13.0, pix.y + s * 17.0)); 
+                vec3 jitterDir = normalize(lightDirs[s] + (rnd - 0.5) * 0.2);
+                shadows[s] = calcShadow(hit_pos, jitterDir);
+            }
+        }
 
         vec3 final_floor_color;
         if (fullRender) {
-            final_floor_color = computePBRLighting(floorMat, hit_pos, N_floor, V_world);
+            final_floor_color = computePBRLighting(floorMat, hit_pos, N_floor, V_world, lightDirs, lightColors, shadows);
         } else {
             vec3 irradiance = texture(irradianceMap, N_floor).rgb;
             final_floor_color = floor_color * irradiance;
         }
         
         float floorViewZ = (view * vec4(hit_pos, 1.0)).z;
-        imageStore(outTex, pix, vec4(final_floor_color, 1.0));
+        float outAlpha = fullRender ? min(shadows[0], shadows[1]) : 1.0f;
+        imageStore(outTex, pix, vec4(final_floor_color, outAlpha)); // Hodnota stínu do Alpha kanálu
         imageStore(normalDepthTex, pix, vec4(N_floor_view, floorViewZ));
     } else { // Background
         imageStore(normalDepthTex, pix, vec4(1000.0f));
         if (fullRender) {
-            imageStore(outTex, pix, vec4(0.0)); // Plně průhledné pozadí, aby byl vidět skybox za ním
+            imageStore(outTex, pix, vec4(0.0, 0.0, 0.0, -1.0f)); // -1.0f tag pro průhledné pozadí
         } else {
-            imageStore(outTex, pix, vec4(0.2, 0.2, 0.2, 1.0)); // Jednobarevné pozadí pro preview mód
+            imageStore(outTex, pix, vec4(0.2, 0.2, 0.2, -2.0f)); // -2.0f tag pro pevné pozadí
         }
     }
 }

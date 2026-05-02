@@ -30,7 +30,6 @@ void MPMIntegrationSim::setupScene(){
             if (c < 6) std::cout << ", ";   
         }
         std::cout << ")" << std::endl;
-
     }
 
     float fps = 30;

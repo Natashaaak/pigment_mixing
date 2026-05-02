@@ -81,7 +81,7 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     reduce_verbose = true;
     end_frame = 20;     // last frame to simulate
     fps = fps_value;    // frames per second
-    n_threads = 8;      // number of threads in parallel
+    n_threads = 12;      // number of threads in parallel
 
     // pbc = true;
 

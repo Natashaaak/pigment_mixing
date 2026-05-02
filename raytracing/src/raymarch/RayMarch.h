@@ -58,9 +58,9 @@ private:
     DepthProcessor *depthMaps;
     BinaryDensityGrid *bdg;
     AABBc *a;
-    Shader *shader, *texShader, *interpolation, *spatulaShader;
+    Shader *shader, *texShader, *interpolation, *spatulaShader, *bilateralShader;
     Shader *skyboxShader;
-    GLuint spheresSSBO = 0, pigmentsSSBO = 0, diffusionSSBO = 0, outputTex = 0, quadVAO = 0, quadVBO = 0, normalDepthTex = 0;
+    GLuint spheresSSBO = 0, pigmentsSSBO = 0, diffusionSSBO = 0, outputTex = 0, postProcessTex = 0, quadVAO = 0, quadVBO = 0, normalDepthTex = 0;
     GLuint skyboxVAO = 0, skyboxVBO = 0;
     SpatulaMesh* spatulaMesh = nullptr;
     GLuint hdrTexture = 0, irradianceTexture = 0, prefilterTexture = 0, brdfLUTTexture = 0;
@@ -77,6 +77,9 @@ private:
     MaterialConfig spatulaMetal = {glm::vec3(1.0f), 0.8f, 0.1f};
     MaterialConfig spatulaWood = {glm::vec3(0.59f, 0.29f, 0.0f), 0.0f, 0.8f};
     MaterialConfig floorMat = {glm::vec3(0.85f), 0.0f, 0.6f};
+    // -0.963066f, 0.135988f, 0.135988f
+    glm::vec3 lightDirs[2] = {glm::normalize(glm::vec3(0.9096f, 0.1966f, 0.3660f)), glm::normalize(glm::vec3(-0.2853f, 0.1966f, 0.9380f))};
+    glm::vec3 lightColors[2] = {glm::vec3(1.0f), glm::vec3(1.0f)};
 };
 
 

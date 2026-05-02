@@ -4,12 +4,16 @@
 
 void Simulation::updateDt(){
 
-    auto max_velocity_it = std::max_element( particles.v.begin(), particles.v.end(),
-                                             []( const TV &v1, const TV &v2 )
-                                             {
-                                                 return v1.squaredNorm() < v2.squaredNorm();
-                                             } );
-    T max_speed = (*max_velocity_it).norm();
+    T max_speed_sq = 0.0;
+    #pragma omp parallel for reduction(max:max_speed_sq) num_threads(n_threads)
+    for(int p = 0; p < Np; p++) {
+        if (!particles.active[p]) continue;
+        T speed_sq = particles.v[p].squaredNorm();
+        if (speed_sq > max_speed_sq) {
+            max_speed_sq = speed_sq;
+        }
+    }
+    T max_speed = std::sqrt(max_speed_sq);
 
     if (max_speed >= wave_speed){
         debug("               FYI the particle speed ", max_speed, " is larger than elastic wave speed ", wave_speed);

@@ -139,7 +139,7 @@ void SpatulaMesh::loadOBJ(const std::string& path) {
     spdlog::info("Loaded OBJ: {} with {} vertices across {} material groups.", path, finalVertices.size(), groups.size());
 }
 
-void SpatulaMesh::render(Shader* shader, const glm::mat4& invSpatulaTransform, Camera* camera, bool fullRender, GLuint hdrTexture, GLuint irradianceTexture, GLuint brdfLUTTexture, const SpatulaMaterial& woodMat, const SpatulaMaterial& metalMat) const {
+void SpatulaMesh::render(Shader* shader, const glm::mat4& invSpatulaTransform, Camera* camera, bool fullRender, GLuint hdrTexture, GLuint irradianceTexture, GLuint brdfLUTTexture, const SpatulaMaterial& woodMat, const SpatulaMaterial& metalMat, const glm::vec3 lightDirs[2], const glm::vec3 lightColors[2]) const {
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glDepthFunc(GL_LESS); // Vykreslí se jen to, co je před fluidem
@@ -151,6 +151,10 @@ void SpatulaMesh::render(Shader* shader, const glm::mat4& invSpatulaTransform, C
     shader->setUniform("projection", camera->getProj());
     shader->setUniform("camPos", camera->cameraPos);
     shader->setUniform("fullRender", fullRender);
+    shader->setUniform("lightDirs[0]", lightDirs[0]);
+    shader->setUniform("lightDirs[1]", lightDirs[1]);
+    shader->setUniform("lightColors[0]", lightColors[0]);
+    shader->setUniform("lightColors[1]", lightColors[1]);
     
     if (hdrTexture) { glActiveTexture(GL_TEXTURE5); glBindTexture(GL_TEXTURE_CUBE_MAP, hdrTexture); shader->setUniform("hdrMap", 5); }
     if (irradianceTexture) { glActiveTexture(GL_TEXTURE6); glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceTexture); shader->setUniform("irradianceMap", 6); }

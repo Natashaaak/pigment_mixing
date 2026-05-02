@@ -50,31 +50,30 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
-vec3 computePBRLighting(Material mat, vec3 worldPos, vec3 N, vec3 V) {
+vec3 computePBRLighting(Material mat, vec3 worldPos, vec3 N, vec3 V, vec3 lightDirs[2], vec3 lightColors[2], float shadows[2]) {
     vec3 F0 = vec3(0.04); 
     F0 = mix(F0, mat.albedo, mat.metallic);
     float NdotV = max(dot(N, V), 0.0);
     vec3 Lo = vec3(0.0);
 
-    // Simulate one directional light for Cook-Torrance highlights
-    vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
-    vec3 lightColor = vec3(1.5);
-    vec3 L = lightDir;
-    vec3 H = normalize(V + L);
-    float NdotL = max(dot(N, L), 0.0);
-    
-    float NDF = DistributionGGX(N, H, mat.roughness);   
-    float G   = GeometrySmith(N, V, L, mat.roughness);      
-    vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);       
-    
-    vec3 numerator    = NDF * G * F;
-    float denominator = 4.0 * NdotV * NdotL + 0.0001;
-    vec3 specular     = numerator / denominator;
-    
-    vec3 kS = F;
-    vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - mat.metallic;	  
-    Lo += (kD * mat.albedo / pi + specular) * lightColor * NdotL;
+    for(int i = 0; i < 2; i++) {
+        vec3 L = normalize(lightDirs[i]);
+        vec3 H = normalize(V + L);
+        float NdotL = max(dot(N, L), 0.0);
+        
+        float NDF = DistributionGGX(N, H, mat.roughness);   
+        float G   = GeometrySmith(N, V, L, mat.roughness);      
+        vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);       
+        
+        vec3 numerator    = NDF * G * F;
+        float denominator = 4.0 * NdotV * NdotL + 0.0001;
+        vec3 specular     = numerator / denominator;
+        
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - mat.metallic;	  
+        Lo += (kD * mat.albedo / pi + specular) * lightColors[i] * NdotL * shadows[i];
+    }
 
     // Ambient IBL
     vec3 F_ibl = fresnelSchlickRoughness(NdotV, F0, mat.roughness);

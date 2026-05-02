@@ -12,6 +12,7 @@ void Simulation::MUSL(){
 
     #pragma omp parallel for schedule(static) num_threads(n_threads)
     for(int p=0; p<Np; p++){
+        if (!particles.active[p]) continue;
 
         //// Velicity is updated
         if (flip_ratio < -1){ // APIC
@@ -33,6 +34,8 @@ void Simulation::MUSL(){
 
         #pragma omp for nowait
         for(int p = 0; p < Np; p++){
+            if (!particles.active[p]) continue;
+
             TV xp = particles.x[p];
             const auto &pn = p_neighbors[p];
             int count = 0;

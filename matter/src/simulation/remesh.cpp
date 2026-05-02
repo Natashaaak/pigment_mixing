@@ -43,47 +43,30 @@ void Simulation::remeshFixed(unsigned int extra_nodes){
 
 void Simulation::remeshFixedInit(unsigned int sfx, unsigned int sfy, unsigned int sfz){
 
-    // ACTUAL min and max position of particles
-    auto max_x_it = std::max_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(0) < x2(0);
-                                             } );
-    T max_x = (*max_x_it)(0);
-    auto max_y_it = std::max_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(1) < x2(1);
-                                             } );
-    T max_y = (*max_y_it)(1);
+    T min_x = 1e20, max_x = -1e20;
+    T min_y = 1e20, max_y = -1e20;
 #ifdef THREEDIM
-    auto max_z_it = std::max_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(2) < x2(2);
-                                             } );
-    T max_z = (*max_z_it)(2);
+    T min_z = 1e20, max_z = -1e20;
 #endif
-    auto min_x_it = std::min_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(0) < x2(0);
-                                             } );
-    T min_x = (*min_x_it)(0);
-    auto min_y_it = std::min_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(1) < x2(1);
-                                             } );
-    T min_y = (*min_y_it)(1);
+    bool any_active = false;
+    for(int p = 0; p < Np; p++) {
+        if (!particles.active[p]) continue;
+        any_active = true;
+        min_x = std::min(min_x, particles.x[p](0));
+        max_x = std::max(max_x, particles.x[p](0));
+        min_y = std::min(min_y, particles.x[p](1));
+        max_y = std::max(max_y, particles.x[p](1));
 #ifdef THREEDIM
-    auto min_z_it = std::min_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(2) < x2(2);
-                                             } );
-    T min_z = (*min_z_it)(2);
+        min_z = std::min(min_z, particles.x[p](2));
+        max_z = std::max(max_z, particles.x[p](2));
 #endif
+    }
+    if (!any_active) {
+        min_x = max_x = min_y = max_y = 0;
+#ifdef THREEDIM
+        min_z = max_z = 0;
+#endif
+    }
     
     // check or grid_reference_point
     if (grid_reference_point[0] < 1e10){
@@ -197,46 +180,30 @@ void Simulation::remeshFixedInit(unsigned int sfx, unsigned int sfy, unsigned in
 
 void Simulation::remeshFixedCont(){
 
-    auto max_x_it = std::max_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(0) < x2(0);
-                                             } );
-    T max_x = (*max_x_it)(0);
-    auto min_x_it = std::min_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(0) < x2(0);
-                                             } );
-    T min_x = (*min_x_it)(0);
-
-    auto max_y_it = std::max_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(1) < x2(1);
-                                             } );
-    T max_y = (*max_y_it)(1);
-    auto min_y_it = std::min_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(1) < x2(1);
-                                             } );
-    T min_y = (*min_y_it)(1);
+    T min_x = 1e20, max_x = -1e20;
+    T min_y = 1e20, max_y = -1e20;
 #ifdef THREEDIM
-    auto max_z_it = std::max_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(2) < x2(2);
-                                             } );
-    T max_z = (*max_z_it)(2);
-    auto min_z_it = std::min_element( particles.x.begin(), particles.x.end(),
-                                             []( const TV &x1, const TV &x2 )
-                                             {
-                                                 return x1(2) < x2(2);
-                                             } );
-    T min_z = (*min_z_it)(2);
+    T min_z = 1e20, max_z = -1e20;
 #endif
-
+    bool any_active = false;
+    for(int p = 0; p < Np; p++) {
+        if (!particles.active[p]) continue;
+        any_active = true;
+        min_x = std::min(min_x, particles.x[p](0));
+        max_x = std::max(max_x, particles.x[p](0));
+        min_y = std::min(min_y, particles.x[p](1));
+        max_y = std::max(max_y, particles.x[p](1));
+#ifdef THREEDIM
+        min_z = std::min(min_z, particles.x[p](2));
+        max_z = std::max(max_z, particles.x[p](2));
+#endif
+    }
+    if (!any_active) {
+        min_x = max_x = min_y = max_y = 0;
+#ifdef THREEDIM
+        min_z = max_z = 0;
+#endif
+    }
 
     // high_x;
     if (max_x < max_x_init){

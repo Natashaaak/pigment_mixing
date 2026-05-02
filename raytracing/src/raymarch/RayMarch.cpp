@@ -2,6 +2,7 @@
 
 #include "PassTimer.h"
 #include "HDRLoader.h"
+#include "PassTimer.h"
 #include <fstream>
 #include <vector>
 #include "../../../deps/json.hpp"
@@ -31,10 +32,12 @@ RayMarch::~RayMarch() {
     delete texShader;
     delete spatulaShader;
     delete skyboxShader;
+    delete bilateralShader;
     glDeleteBuffers(1, &spheresSSBO);
     glDeleteBuffers(1, &pigmentsSSBO);
     glDeleteBuffers(1, &diffusionSSBO);
     glDeleteTextures(1, &outputTex);
+    glDeleteTextures(1, &postProcessTex);
     glDeleteTextures(1, &normalDepthTex);
     if (hdrTexture) {
         glDeleteTextures(1, &hdrTexture);
@@ -53,7 +56,12 @@ RayMarch::~RayMarch() {
 }
 
 void RayMarch::loadConfig(const std::string& path) {
-    std::ifstream file(path);
+    std::string config_path = path;
+    std::ifstream file(config_path);
+    if (!file.is_open() && config_path == "../render_config.json") {
+        config_path = "render_config.json"; // Fallback
+        file.open(config_path);
+    }
     if (file.is_open()) {
         try {
             nlohmann::json j;
@@ -61,31 +69,31 @@ void RayMarch::loadConfig(const std::string& path) {
             if (j.contains("materials")) {
                 auto& mats = j["materials"];
                 if (mats.contains("fluid")) {
-                    fluidMat.albedo = glm::vec3(mats["fluid"]["albedo"][0], mats["fluid"]["albedo"][1], mats["fluid"]["albedo"][2]);
-                    fluidMat.metallic = mats["fluid"]["metallic"];
-                    fluidMat.roughness = mats["fluid"]["roughness"];
+                    fluidMat.albedo = glm::vec3(mats["fluid"]["albedo"][0].get<float>(), mats["fluid"]["albedo"][1].get<float>(), mats["fluid"]["albedo"][2].get<float>());
+                    fluidMat.metallic = mats["fluid"]["metallic"].get<float>();
+                    fluidMat.roughness = mats["fluid"]["roughness"].get<float>();
                 }
                 if (mats.contains("spatula_metal")) {
-                    spatulaMetal.albedo = glm::vec3(mats["spatula_metal"]["albedo"][0], mats["spatula_metal"]["albedo"][1], mats["spatula_metal"]["albedo"][2]);
-                    spatulaMetal.metallic = mats["spatula_metal"]["metallic"];
-                    spatulaMetal.roughness = mats["spatula_metal"]["roughness"];
+                    spatulaMetal.albedo = glm::vec3(mats["spatula_metal"]["albedo"][0].get<float>(), mats["spatula_metal"]["albedo"][1].get<float>(), mats["spatula_metal"]["albedo"][2].get<float>());
+                    spatulaMetal.metallic = mats["spatula_metal"]["metallic"].get<float>();
+                    spatulaMetal.roughness = mats["spatula_metal"]["roughness"].get<float>();
                 }
                 if (mats.contains("spatula_wood")) {
-                    spatulaWood.albedo = glm::vec3(mats["spatula_wood"]["albedo"][0], mats["spatula_wood"]["albedo"][1], mats["spatula_wood"]["albedo"][2]);
-                    spatulaWood.metallic = mats["spatula_wood"]["metallic"];
-                    spatulaWood.roughness = mats["spatula_wood"]["roughness"];
+                    spatulaWood.albedo = glm::vec3(mats["spatula_wood"]["albedo"][0].get<float>(), mats["spatula_wood"]["albedo"][1].get<float>(), mats["spatula_wood"]["albedo"][2].get<float>());
+                    spatulaWood.metallic = mats["spatula_wood"]["metallic"].get<float>();
+                    spatulaWood.roughness = mats["spatula_wood"]["roughness"].get<float>();
                 }
                 if (mats.contains("floor")) {
-                    floorMat.albedo = glm::vec3(mats["floor"]["albedo"][0], mats["floor"]["albedo"][1], mats["floor"]["albedo"][2]);
-                    floorMat.metallic = mats["floor"]["metallic"];
-                    floorMat.roughness = mats["floor"]["roughness"];
+                    floorMat.albedo = glm::vec3(mats["floor"]["albedo"][0].get<float>(), mats["floor"]["albedo"][1].get<float>(), mats["floor"]["albedo"][2].get<float>());
+                    floorMat.metallic = mats["floor"]["metallic"].get<float>();
+                    floorMat.roughness = mats["floor"]["roughness"].get<float>();
                 }
             }
         } catch (const std::exception& e) {
-            spdlog::error("Error parsing config {}: {}", path, e.what());
+            spdlog::error("Error parsing config {}: {}", config_path, e.what());
         }
     } else {
-        spdlog::warn("Could not open config file: {}", path);
+        spdlog::warn("Could not open config file: {}", config_path);
     }
 }
 
@@ -93,6 +101,7 @@ void RayMarch::initShader() {
     shader = new Shader("../shaders/raymarching/raymarch.glsl");
     texShader = new Shader("../shaders/raymarching/shader.vert", "../shaders/raymarching/shader.frag");
     spatulaShader = new Shader("../shaders/raymarching/spatula.vert", "../shaders/raymarching/spatula.frag");
+    bilateralShader = new Shader("../shaders/raymarching/bilateral.glsl");
 }
 
 void RayMarch::texQuadInit() {
@@ -225,6 +234,10 @@ void RayMarch::resizeTexutres(GLint ww, GLint wh) {
         glBindTexture(GL_TEXTURE_2D, normalDepthTex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F,
         ww, wh, 0, GL_RGBA, GL_FLOAT, nullptr);
+
+        glBindTexture(GL_TEXTURE_2D, postProcessTex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F,
+        ww, wh, 0, GL_RGBA, GL_FLOAT, nullptr);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -233,6 +246,15 @@ void RayMarch::resizeTexutres(GLint ww, GLint wh) {
 void RayMarch::createOutputTexture() {
     glGenTextures(1, &outputTex);
     glBindTexture(GL_TEXTURE_2D, outputTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F,
+        10, 10, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGenTextures(1, &postProcessTex);
+    glBindTexture(GL_TEXTURE_2D, postProcessTex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F,
         10, 10, 0, GL_RGBA, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -298,7 +320,7 @@ void RayMarch::renderTex(Camera* camera) {
     texShader->use();
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, outputTex);
+    glBindTexture(GL_TEXTURE_2D, state.fullRender ? postProcessTex : outputTex);
     texShader->setUniform("renderedImage", 0);
 
     // Předáme normalDepthTex, aby si frag shader mohl přečíst pozici a spočítat gl_FragDepth
@@ -413,6 +435,12 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("has_spatula", mpm->spatulaExists());
     shader->setUniform("spatulaDim", mpm->getSpatulaDim());
 
+    // Směrová světla pro PBR (D, F, G) a stíny
+    shader->setUniform("lightDirs[0]", lightDirs[0]);
+    shader->setUniform("lightDirs[1]", lightDirs[1]);
+    shader->setUniform("lightColors[0]", lightColors[0]);
+    shader->setUniform("lightColors[1]", lightColors[1]);
+
     GLuint groupCountX = (ww + state.groupSizeRayMarching.x - 1) / state.groupSizeRayMarching.x;
     GLuint groupCountY = (wh + state.groupSizeRayMarching.y - 1) / state.groupSizeRayMarching.y;
     // glBeginQuery(GL_TIME_ELAPSED, timer.queries[1]);
@@ -421,6 +449,16 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
     
     if (state.fullRender) {
+        // Bilateral blur pass pro vyhlazení stínů podložky (pouze v plném renderu)
+        bilateralShader->use();
+        bilateralShader->setUniform("width", ww);
+        bilateralShader->setUniform("height", wh);
+        glBindImageTexture(0, outputTex, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+        glBindImageTexture(1, normalDepthTex, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+        glBindImageTexture(2, postProcessTex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+        glDispatchCompute(groupCountX, groupCountY, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+        
         renderSkybox(camera);
     }
     
@@ -428,7 +466,7 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     if (mpm->spatulaExists() && spatulaMesh) {
         SpatulaMaterial woodMat = {spatulaWood.albedo, spatulaWood.metallic, spatulaWood.roughness};
         SpatulaMaterial metalMat = {spatulaMetal.albedo, spatulaMetal.metallic, spatulaMetal.roughness};
-        spatulaMesh->render(spatulaShader, mpm->getSpatulaInvTransform(), camera, state.fullRender, hdrTexture, irradianceTexture, brdfLUTTexture, woodMat, metalMat);
+        spatulaMesh->render(spatulaShader, mpm->getSpatulaInvTransform(), camera, state.fullRender, hdrTexture, irradianceTexture, brdfLUTTexture, woodMat, metalMat, lightDirs, lightColors);
     }
     // timer.end();
     // glEndQuery(GL_TIME_ELAPSED);

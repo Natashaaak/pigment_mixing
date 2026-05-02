@@ -9,6 +9,7 @@
 class Particles{
 public:
   Particles(unsigned int Np = 1){
+      active.resize(Np); std::fill( active.begin(), active.end(), true );
       x.resize(Np); std::fill( x.begin(), x.end(), TV::Zero() );
       v.resize(Np); std::fill( v.begin(), v.end(), TV::Zero() );
       pic.resize(Np); std::fill( pic.begin(), pic.end(), TV::Zero() );
@@ -27,6 +28,7 @@ public:
       diffusion_factor.resize(Np); std::fill( diffusion_factor.begin(), diffusion_factor.end(), 0.0 );
   }
 
+  std::vector<bool> active;
   std::vector<TV> x;
   std::vector<TV> v;
   std::vector<TV> pic;

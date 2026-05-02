@@ -9,17 +9,20 @@ void Simulation::PBCAddParticles1D(){
 
     num_add_pbc_particles = 0;
     for(int p = 0; p < Np; p++){
+        if (!particles.active[p]) continue;
 
         TV part_x = particles.x[p]; // copy
 
         particles.x.push_back(part_x+incr);
         particles.v.push_back(particles.v[p]);
+        particles.active.push_back(particles.active[p]);
         particles.F.push_back(particles.F[p]);
         particles.Bmat.push_back(particles.Bmat[p]);
         num_add_pbc_particles++;
 
         particles.x.push_back(part_x-incr);
         particles.v.push_back(particles.v[p]);
+        particles.active.push_back(particles.active[p]);
         particles.F.push_back(particles.F[p]);
         particles.Bmat.push_back(particles.Bmat[p]);
         num_add_pbc_particles++;
@@ -40,6 +43,7 @@ void Simulation::PBCAddParticles(unsigned int safety_factor){
 
     #pragma omp parallel for reduction(+:num_add_pbc_particles) num_threads(n_threads)
     for(int p = 0; p < Np; p++){
+        if (!particles.active[p]) continue;
 
         TV part_x = particles.x[p]; // copy
         T diff;
@@ -51,6 +55,7 @@ void Simulation::PBCAddParticles(unsigned int safety_factor){
             {
                 particles.x.push_back(part_x);
                 particles.v.push_back(particles.v[p]);
+                particles.active.push_back(particles.active[p]);
                 particles.F.push_back(particles.F[p]);
                 particles.Bmat.push_back(particles.Bmat[p]);
             }
@@ -65,6 +70,7 @@ void Simulation::PBCAddParticles(unsigned int safety_factor){
             {
                 particles.x.push_back(part_x);
                 particles.v.push_back(particles.v[p]);
+                particles.active.push_back(particles.active[p]);
                 particles.F.push_back(particles.F[p]);
                 particles.Bmat.push_back(particles.Bmat[p]);
             }
@@ -90,6 +96,7 @@ void Simulation::PBCDelParticles(){
 
     particles.x.erase(   particles.x.end()   -num_add_pbc_particles, particles.x.end()   );
     particles.v.erase(   particles.v.end()   -num_add_pbc_particles, particles.v.end()   );
+    particles.active.erase(particles.active.end()-num_add_pbc_particles, particles.active.end() );
     particles.F.erase(   particles.F.end()   -num_add_pbc_particles, particles.F.end()   );
     particles.Bmat.erase(particles.Bmat.end()-num_add_pbc_particles, particles.Bmat.end());
     Np = particles.x.size();
