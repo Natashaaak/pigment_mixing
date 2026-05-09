@@ -259,7 +259,8 @@ float sdSpatula(vec3 p, bool with_handle) {
     }
 
     // 5. Extruze
-    float d_y = abs(p.y + 0.01) - halfThickness;
+    // float d_y = abs(p.y + 0.01) - halfThickness;
+    float d_y = abs(p.y) - halfThickness;
     float d_blade = max(d_2d, d_y);
 
     if (!with_handle) return d_blade;
@@ -631,7 +632,7 @@ float computeDensity(vec3 pos, vec3 ray_start, float depth, ivec2 pix, out vec3 
             }
         }
     }
-    if(density > 0.0f) {
+    if(density > iso) { // OPTIMIZATION: Only compute the heavy filtered color if we actually hit the surface, not in the 'halo'
         if (showDiffusion) {
             if (use_closest_color && found_closest) {
                 outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), p_diffusion[closest_id]);
@@ -708,6 +709,7 @@ float calcFluidShadow(vec3 ro, vec3 rd, float maxt) {
 
     for(int i = 0; i < 40 && t < maxt; i++) {
         vec3 p = ro + rd * t;
+        
         // Vzorkujeme hustotu s radius_scale = 1.0
         float dens = computeDensityOnly(p, 1.0);
         
@@ -735,12 +737,33 @@ float calcFluidShadow(vec3 ro, vec3 rd, float maxt) {
 float calcSpatulaShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     if (!has_spatula) return 1.0;
     
-    float res = 1.0;
-    float t = mint;
-    vec3 dir_local = (invSpatulaTransform * vec4(rd, 0.0)).xyz;
-    float dir_len = length(dir_local);
+    vec3 origin = (invSpatulaTransform * vec4(ro, 1.0)).xyz;
+    vec3 direction = (invSpatulaTransform * vec4(rd, 0.0)).xyz;
+    float dir_len = length(direction);
+    vec3 dir_local = direction / dir_len;
+
+    // OPTIMIZATION: Slab test pro Bounding Box pro stínový paprsek
+    vec3 invDir = 1.0 / (dir_local + sign(dir_local) * 1e-9);
+    vec3 paddingT = vec3(0.05); // 5 cm reserve
+    vec3 boxMin = vec3(-spatulaDim.x - 9.0, -spatulaDim.y - 2.0, -spatulaDim.z - 9.0);
+    vec3 boxMax = vec3( spatulaDim.x + 9.0,  5.0,  spatulaDim.z + 9.0);
     
-    for(int i = 0; i < 64 && t < maxt; i++) {
+    vec3 t0 = (boxMin - paddingT - origin) * invDir;
+    vec3 t1 = (boxMax + paddingT - origin) * invDir;
+    vec3 tMin = min(t0, t1);
+    vec3 tMax = max(t0, t1);
+    
+    float t_near = max(tMin.x, max(tMin.y, tMin.z));
+    float t_far = min(tMax.x, min(tMax.y, tMax.z));
+
+    // Paprsek míjí Bounding Box špachtle -> 100% světlo
+    if (t_near > t_far || t_far < 0.0 || (t_near / dir_len) > maxt) return 1.0;
+
+    float res = 1.0;
+    // Začneme stínovat až od Bounding Boxu, ušetří to kroky v prázdnu!
+    float t = max(mint, (t_near / dir_len) - 0.01); 
+    
+    for(int i = 0; i < 30 && t < maxt; i++) { // OPTIMIZATION: Sníženo z 64 na 30 iterací
         vec3 p = ro + rd * t;
         vec3 p_local = (invSpatulaTransform * vec4(p, 1.0)).xyz;
         float d = sdSpatula(p_local, true);
@@ -749,7 +772,9 @@ float calcSpatulaShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
         if(d_world < 0.001) return 0.0; // Paprsek narazil do špachtle
         
         res = min(res, k * d_world / t);
-        t += clamp(d_world, 0.01, 0.2); // Dynamický krok
+        t += clamp(d_world, 0.03, 0.4); // Zvětšený minimální krok
+        
+        if ((t * dir_len) > t_far + 0.05) break; // Konec, jakmile opustíme AABB
     }
     return clamp(res, 0.0, 1.0);
 }
@@ -856,9 +881,7 @@ void main(){
     float t_spatula = 1e6; 
     bool hit_spatula = false;
 
-    // TEMP
-    // if (has_spatula) {
-    if (true) {
+    if (has_spatula) {
         vec3 p_temp;
         hit_spatula = rayMarchSpatula(ray_vdb, t_spatula, p_temp, 1000.0);
     }
@@ -869,7 +892,7 @@ void main(){
     // Kontrola, že paprsek míří směrem dolů k podlaze
     if (ray_vdb.dir.y < -0.0001) {
         // Zde můžeš upravit výšku podlahy. Např. + 0.05 ji zvedne o 5 cm
-        float floor_height = gridStart.y + 0.08; 
+        float floor_height = - 0.03; 
         float temp_t = (floor_height - ray_vdb.start.y) / ray_vdb.dir.y;
         if (temp_t > 0.0) {
             t_floor = temp_t;
@@ -995,7 +1018,7 @@ void main(){
         float shadows[2] = {1.0, 1.0};
         if (fullRender) {
             for(int s = 0; s < 2; s++) {
-                float rnd = rand(vec2(pix.x + s * 13.0, pix.y + s * 17.0)); 
+                float rnd = rand(hit_pos.xz * 100.0 + vec2(s * 13.0, s * 17.0));
                 vec3 jitterDir = normalize(lightDirs[s] + (rnd - 0.5) * 0.2);
                 shadows[s] = calcShadow(hit_pos, jitterDir);
             }

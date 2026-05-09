@@ -54,7 +54,7 @@ public:
         } else if (p2d.y() < -he) {
             // Definujeme poloměry elipsy
             float r_x = (float)halfWidth;        // b1
-            float r_z = 0.75f * (float)halfWidth; // Tvůj požadovaný poměr 0.75 * šířka
+            float r_z = 1.5f * (float)halfWidth; // Sjednoceno se shaderem (1.5 * b1)
             
             // Relativní souřadnice bodu vůči středu elipsy (0, -he)
             Eigen::Vector2f p_rel(p2d.x(), p2d.y() + he);
@@ -67,20 +67,18 @@ public:
             d_2d = k0 * (k0 - 1.0f) / k1;
         } else {
             // Zde potřebujeme spočítat vzdálenost k "nekonečnému" lichoběžníku
-            // Tedy vzdálenost k šikmým stěnám
-            Eigen::Vector2f k1(b2, he);
-            Eigen::Vector2f k2(b2 - b1, 2.0f * he);
+            Eigen::Vector2f p1(b1, -he);
+            Eigen::Vector2f p2(b2, he);
+            Eigen::Vector2f ba = p2 - p1;
+            Eigen::Vector2f pa = p2d - p1;
+            float h = std::max(0.0f, std::min(1.0f, pa.dot(ba) / ba.dot(ba)));
+            float d_side = (pa - ba * h).norm(); // Vzdálenost k šikmé úsečce
             
-            // Vzdálenost k šikmé stěně
-            float dot_val = (k1 - p2d).dot(k2) / k2.dot(k2);
-            float clamped_val = std::max(0.0f, std::min(1.0f, dot_val));
-            Eigen::Vector2f cb = p2d - k1 + k2 * clamped_val;
-            d_2d = (p2d.x() - b1 + (b1 - b2) * (p2d.y() + he) / (2.0f * he));
+            float inside_x = b1 - (b1 - b2) * (p2d.y() + he) / (2.0f * he);
+            float d_inside = p2d.x() - inside_x;
+            
+            d_2d = (p2d.x() < inside_x) ? d_inside : d_side;
         }
-
-        bool inside = (p2d.y() > -he && p2d.y() < he && p2d.x() < (b1 - (b1-b2)*(p2d.y()+he)/(2.0f*he)));
-        if (inside) d_2d = -std::abs(d_2d);
-        else d_2d = std::abs(d_2d);
 
         // 2. Korektní 3D extruze (Tloušťka v ose Y) pro sphere tracing
         float d_y = std::abs(p.y()) - (float)halfThickness;

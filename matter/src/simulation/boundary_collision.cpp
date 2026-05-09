@@ -11,6 +11,22 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
 
     bool influenced_by_spatula = false;
 
+    // --- PŘEDSTIŽNÁ DETEKCE ŠPACHTLE ---
+    // Vytvoříme detekční zónu (např. 2 * dx) kolem špachtle.
+    // Pokud je částice (uzel) v této zóně, nastavíme influenced_by_spatula = true.
+    if (spatula_ptr != nullptr) {
+        Eigen::Vector4f worldPos;
+#ifdef THREEDIM
+        worldPos << (float)Xi(0), (float)Xi(1), (float)Xi(2), 1.0f;
+#else
+        worldPos << (float)Xi(0), 0.0f, (float)Xi(1), 1.0f;
+#endif
+        Eigen::Vector3f localPos = (spatula_ptr->invTransform.matrix() * worldPos).head<3>();
+        if (spatula_ptr->sdSpatula(localPos) < (T)(2.0 * dx)) {
+            influenced_by_spatula = true;
+        }
+    }
+
     for(auto& obj : objects) {
         bool colliding = obj->inside(Xi);
         if (colliding) {
@@ -77,18 +93,20 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
             if (obj.get() == spatula_ptr) {
                 influenced_by_spatula = true;
 
-                if (Xi(1) < 0.5 * dx) {
-                    // Částice je v pasti u dna
-                    vi = v_obj; 
-                    vi(1) += 0.05 * v_obj.norm(); // Snížili jsme vertikální impuls na 5 %
-                } else {
-                    // Standardní kolize (bezpečnostní nárazník)
-                    // Aplikujeme jej jen tehdy, pokud se částice pohybuje "do" objektu
+                // Pokud je částice v kritické zóně u dna (hrozí film)
+                if (Xi(1) < 0.8 * dx) {
                     TV n = obj->normal(Xi);
-                    TV relative_v = vi - v_obj;
-                    if (relative_v.dot(n) < 0) { // Pokud částice míří do špachtle
-                        vi += n * (0.05 * dx / dt); 
-                    }
+                    
+                    // Univerzální výpočet tečného vektoru směřujícího NAHORU (pro 2D i 3D)
+                    TV up = TV::Zero();
+                    up(1) = 1.0; // Globální směr nahoru
+                    TV t = up - up.dot(n) * n; // Projekce osy Y do tečné roviny
+                    if (t.norm() > 1e-6) t.normalize();
+                    else t = TV::Zero(); // Pro jistotu, kdyby byla normála přesně (0,1,0)
+
+                    // Rychlost: rychlost špachtle + "skluz" směrem nahoru
+                    // 0.2 * v_obj.norm() určí, jak ochotně barva po špachtli klouže
+                    vi = v_obj + t * (0.2 * v_obj.norm());
                 }
             }
 

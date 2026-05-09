@@ -7,6 +7,8 @@
 #include <vector>
 #include "../../../deps/json.hpp"
 
+static GLuint postProcessPingPongTex = 0;
+
 RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     glGenBuffers(1, &spheresSSBO);
     glGenBuffers(1, &pigmentsSSBO);
@@ -38,6 +40,9 @@ RayMarch::~RayMarch() {
     glDeleteBuffers(1, &diffusionSSBO);
     glDeleteTextures(1, &outputTex);
     glDeleteTextures(1, &postProcessTex);
+    if (postProcessPingPongTex) {
+        glDeleteTextures(1, &postProcessPingPongTex);
+    }
     glDeleteTextures(1, &normalDepthTex);
     if (hdrTexture) {
         glDeleteTextures(1, &hdrTexture);
@@ -238,6 +243,10 @@ void RayMarch::resizeTexutres(GLint ww, GLint wh) {
         glBindTexture(GL_TEXTURE_2D, postProcessTex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F,
         ww, wh, 0, GL_RGBA, GL_FLOAT, nullptr);
+        
+        glBindTexture(GL_TEXTURE_2D, postProcessPingPongTex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F,
+        ww, wh, 0, GL_RGBA, GL_FLOAT, nullptr);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -262,6 +271,15 @@ void RayMarch::createOutputTexture() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
+    glGenTextures(1, &postProcessPingPongTex);
+    glBindTexture(GL_TEXTURE_2D, postProcessPingPongTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F,
+        10, 10, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
     glGenTextures(1, &normalDepthTex);
     glBindTexture(GL_TEXTURE_2D, normalDepthTex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F,
@@ -279,31 +297,32 @@ AABBc *RayMarch::getA() const {
 }
 
 void RayMarch::bindSpheres(MPMIntegrationSim *mpm) {
+    static bool isAllocated = false;
+    size_t numParticles = mpm->getParticleAmount();
+
+    if (!isAllocated) {
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, spheresSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, numParticles * sizeof(glm::vec4), nullptr, GL_STREAM_DRAW);
+        
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, pigmentsSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, numParticles * sizeof(std::array<float, 7>), nullptr, GL_STREAM_DRAW);
+        
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, diffusionSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, numParticles * sizeof(float), nullptr, GL_STREAM_DRAW);
+        
+        isAllocated = true;
+    }
+
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, spheresSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER,
-        mpm->getParticleAmount() * sizeof(glm::vec4),
-        nullptr,
-        GL_STREAM_DRAW);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
-        mpm->getParticleAmount() * sizeof(glm::vec4), mpm->getParticles().data());
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, numParticles * sizeof(glm::vec4), mpm->getParticles().data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start, spheresSSBO);
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, pigmentsSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER,
-        mpm->getParticleAmount() * sizeof(std::array<float, 7>),
-        nullptr,
-        GL_STREAM_DRAW);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
-        mpm->getParticleAmount() * sizeof(std::array<float, 7>), mpm->getPigments().data());
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, numParticles * sizeof(std::array<float, 7>), mpm->getPigments().data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start + 8, pigmentsSSBO);
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, diffusionSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER,
-        mpm->getParticleAmount() * sizeof(float),
-        nullptr,
-        GL_STREAM_DRAW);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
-        mpm->getParticleAmount() * sizeof(float), mpm->getDiffusionFactors().data());
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, numParticles * sizeof(float), mpm->getDiffusionFactors().data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start + 9, diffusionSSBO);
 }
 
@@ -449,13 +468,28 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
     
     if (state.fullRender) {
-        // Bilateral blur pass pro vyhlazení stínů podložky (pouze v plném renderu)
+        // Bilateral blur Pass 1 (Horizontal)
         bilateralShader->use();
         bilateralShader->setUniform("width", ww);
         bilateralShader->setUniform("height", wh);
+        bilateralShader->setUniform("blurDirection", glm::ivec2(1, 0));
+        bilateralShader->setUniform("isFinalPass", false);
+        
         glBindImageTexture(0, outputTex, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
         glBindImageTexture(1, normalDepthTex, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+        glBindImageTexture(2, postProcessPingPongTex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+        
+        glDispatchCompute(groupCountX, groupCountY, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+        
+        // Bilateral blur Pass 2 (Vertical)
+        bilateralShader->setUniform("blurDirection", glm::ivec2(0, 1));
+        bilateralShader->setUniform("isFinalPass", true);
+        
+        glBindImageTexture(0, postProcessPingPongTex, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+        // normalDepthTex remains bound to binding 1
         glBindImageTexture(2, postProcessTex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+        
         glDispatchCompute(groupCountX, groupCountY, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
         

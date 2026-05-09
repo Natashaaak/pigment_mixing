@@ -23,6 +23,38 @@ void Simulation::positionUpdate(){
             }
         }
 
+        // --- KOREKCE ČÁSTIC HLUBOKO VE ŠPACHTLI ---
+        // Pokud mřížka nedokázala částici zastavit a ta pronikla do geometrie špachtle
+        if (spatula_ptr != nullptr) {
+            Eigen::Vector4f worldPos;
+#ifdef THREEDIM
+            worldPos << (float)particles.x[p](0), (float)particles.x[p](1), (float)particles.x[p](2), 1.0f;
+#else
+            worldPos << (float)particles.x[p](0), 0.0f, (float)particles.x[p](1), 1.0f;
+#endif
+            Eigen::Vector3f localPos = (spatula_ptr->invTransform.matrix() * worldPos).head<3>();
+            T sd = spatula_ptr->sdSpatula(localPos);
+
+            // Pokud je částice hluboko uvnitř (např. víc než 0.2 * dx)
+            if (sd < (T)(-0.2 * dx)) {
+                TV n = spatula_ptr->normal(particles.x[p]);
+                
+                // Fyzický posun částice přesně na povrch špachtle
+                particles.x[p] -= sd * n;
+
+                // Vynulování akumulovaného pružného stresu zamezí obří odpudivé explozi
+                particles.F[p].setIdentity();
+
+                // Úprava rychlosti, aby nesměřovala dovnitř (promítnutí do tečné roviny)
+                TV v_obj = spatula_ptr->velocity(particles.x[p]);
+                TV v_rel = particles.v[p] - v_obj;
+                T dot = v_rel.dot(n);
+                if (dot < 0) { // Pokud složka rychlosti míří dovnitř špachtle
+                    particles.v[p] = v_rel - dot * n + v_obj;
+                }
+            }
+        }
+
         // Ochrana proti NaN a nekonečnu (pokud výpočet exploduje, NaN by ignorovalo limity a shodilo by to paměť rendereru)
         bool is_invalid = false;
         for (unsigned int d = 0; d < dim; ++d) {

@@ -7,6 +7,8 @@ layout(rgba32f, binding = 2) writeonly uniform image2D outTex;
 
 uniform int width;
 uniform int height;
+uniform ivec2 blurDirection;
+uniform bool isFinalPass;
 
 void main() {
     ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
@@ -16,16 +18,16 @@ void main() {
     
     // Ošetření pozadí
     if (centerData.a < -1.5) { // Preview pozadí
-        imageStore(outTex, pix, vec4(centerData.rgb, 1.0));
+        imageStore(outTex, pix, vec4(centerData.rgb, isFinalPass ? 1.0 : centerData.a));
         return;
     }
     if (centerData.a < -0.5) { // Transparentní pozadí pro skybox
-        imageStore(outTex, pix, vec4(centerData.rgb, 0.0));
+        imageStore(outTex, pix, vec4(centerData.rgb, isFinalPass ? 0.0 : centerData.a));
         return;
     }
     // Pevné objekty (tekutina a špachtle) - propustí původní barvu bez rozmazání
     if (centerData.a > 1.5) {
-        imageStore(outTex, pix, vec4(centerData.rgb, 1.0));
+        imageStore(outTex, pix, vec4(centerData.rgb, isFinalPass ? 1.0 : centerData.a));
         return;
     }
 
@@ -43,9 +45,8 @@ void main() {
     float sigmaNormal = 0.1;
     int radius = 10; // Zvětšení prohledávané oblasti na 21x21 kernel
     
-    for (int y = -radius; y <= radius; ++y) {
-        for (int x = -radius; x <= radius; ++x) {
-            ivec2 offset = ivec2(x, y);
+    for (int i = -radius; i <= radius; ++i) {
+            ivec2 offset = blurDirection * i;
             ivec2 samplePix = clamp(pix + offset, ivec2(0), ivec2(width - 1, height - 1));
             vec4 sampleData = imageLoad(inTex, samplePix);
             
@@ -54,7 +55,7 @@ void main() {
             
             vec4 sampleND = imageLoad(normalDepthTex, samplePix);
             
-            float distSq = float(x*x + y*y);
+            float distSq = float(i * i);
             float wSpatial = exp(-distSq / (2.0 * sigmaSpatial * sigmaSpatial));
             
             float depthDiff = centerDepth - sampleND.w;
@@ -66,8 +67,7 @@ void main() {
             float w = wSpatial * wDepth * wNormal;
             resultColor += sampleData.rgb * w;
             sumWeights += w;
-        }
     }
     
-    imageStore(outTex, pix, vec4(sumWeights > 0.0 ? resultColor / sumWeights : centerData.rgb, 1.0));
+    imageStore(outTex, pix, vec4(sumWeights > 0.0 ? resultColor / sumWeights : centerData.rgb, isFinalPass ? 1.0 : centerData.a));
 }

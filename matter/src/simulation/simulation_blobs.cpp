@@ -163,7 +163,7 @@ void Simulation::blobs(const std::vector<float>& colorRatios, const std::vector<
         }
     }
 
-    sampleParticlesFromVdb(*this, vdb_objects_ptrs, pigments, 0.01f);
+    sampleParticlesFromVdb(*this, vdb_objects_ptrs, pigments, 0.01f, 27);
 }
 
 int Simulation::getMorphPair(float targetVolume) {

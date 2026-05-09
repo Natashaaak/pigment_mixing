@@ -88,7 +88,7 @@ vec3 computePBRLighting(Material mat, vec3 worldPos, vec3 N, vec3 V, vec3 lightD
     vec3 prefilteredColor = textureLod(hdrMap, R, mat.roughness * MAX_REFLECTION_LOD).rgb;    
     
     vec2 brdf  = texture(brdfLUT, vec2(NdotV, mat.roughness)).rg;
-    vec3 specular_ibl = prefilteredColor * (F_ibl * brdf.x + brdf.y);
+    vec3 specular_ibl = prefilteredColor * (F0 * brdf.x + brdf.y);
     
     vec3 ambient = (kD_ibl * diffuse_ibl + specular_ibl);
     return ambient + Lo;

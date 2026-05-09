@@ -41,11 +41,17 @@ bool screenshotsTaken = false;
 
 extern std::string g_spatula_anim_path;
 int g_num_colors = 2;
+// float g_colors[4][3] = {
+//     {0.959123f, 0.802565f, 0.0356184f}, // Yellow
+//     {0.0771705f, 0.0282698f, 0.24833f}, // Blue
+//     {0.995181f, 0.999781f, 0.997048f}, // White
+//     {0.506f, 0.012f, 0.184f}  // Magenta
+// };
 float g_colors[4][3] = {
-    {0.959123f, 0.802565f, 0.0356184f}, // Yellow
-    {0.0771705f, 0.0282698f, 0.24833f}, // Blue
-    {0.995181f, 0.999781f, 0.997048f}, // White
-    {0.506f, 0.012f, 0.184f}  // Magenta
+    {0.982f, 0.655f, 0.001f}, // Yellow
+    {0.003f, 0.015f, 0.076f}, // Blue
+    {0.956f, 0.956f, 0.947f}, // White
+    {0.218f, 0.001f, 0.027f}  // Magenta
 };
 float g_ratios[4] = { 0.5f, 0.5f, 0.0f, 0.0f };
 
@@ -573,7 +579,7 @@ int mainComputeLoop() {
         std::string timestamp = ss.str();
         // Příkaz pro vytvoření MP4 videa s kodekem H.264, který je široce kompatibilní.
         // -pix_fmt yuv420p je důležitý pro kompatibilitu s většinou přehrávačů.
-        std::string cmd = "ffmpeg -y -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png -c:v libx264 -pix_fmt yuv420p " + std::string(outputDir) + "/animation_" + timestamp + ".mp4";
+        std::string cmd = "ffmpeg -y -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png -vf \"pad=ceil(iw/2)*2:ceil(ih/2)*2\" -c:v libx264 -pix_fmt yuv420p " + std::string(outputDir) + "/animation_" + timestamp + ".mp4";
         int ret = system(cmd.c_str());
         if (ret == 0) {
             std::cout << "Video created successfully. Deleting PNG sequence..." << std::endl;
