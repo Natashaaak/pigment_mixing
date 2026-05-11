@@ -601,29 +601,31 @@ float computeDensity(vec3 pos, vec3 ray_start, float depth, ivec2 pix, out vec3 
                     
                     vec4 sphere = spheresData[sphereID];
                     vec3 d = pos - sphere.xyz;
-                    float r = length(d);
+                    float w = 1.0f;
+                    float hr2 = 0.0f;
+                    float current_r2 = 0.0f;
+
+                    if(isAni){
+                        vec3 d_ani = mat3(an[sphereID]) * d;
+                        current_r2 = dot(d_ani, d_ani);
+                        if(current_r2 > 1.0f) continue;
+                        hr2 = 1.0f - current_r2;
+                        w = dets[sphereID];
+                    } else {
+                        current_r2 = dot(d, d);
+                        if(current_r2 > h*h) continue;
+                        hr2 = h*h - current_r2;
+                    }
 
                     if (use_closest_color) {
-                        if (r < min_dist) {
-                            min_dist = r;
+                        float dist_sq = isAni ? dot(d, d) : current_r2; // For closest color we need actual 3D space distance
+                        if (dist_sq < min_dist) { // min_dist now stores squared distance
+                            min_dist = dist_sq;
                             closest_id = sphereID;
                             found_closest = true;
                         }
                     }
 
-                    float compare = h;
-                    float hr2 = h*h - r*r;
-                    float w = 1.0f;
-                    if(isAni){
-                        d = mat3(an[sphereID]) * d;
-                        r = dot(d, d);
-                        compare = 1.0f;
-                        hr2 = 1.0f - r;
-                        w *= dets[sphereID];
-                    }
-                    if(r > compare){
-                        continue;
-                    }
                     w *= poly6 * hr2 * hr2 * hr2;
                     density += w;
                     
@@ -680,21 +682,25 @@ float computeDensityOnly(vec3 pos, float radius_scale){
                     uint sphereID = ids[offset + i];
                     vec4 sphere = spheresData[sphereID];
                     vec3 d = pos - sphere.xyz;
-                    float r = length(d) / radius_scale; // Umělé zvětšení poloměru částice pro širší vzorkování
-                    float compare = h;
-                    float hr2 = h*h - r*r;
                     float w = 1.0f;
+                float hr2 = 0.0f;
+                float rs2 = radius_scale * radius_scale;
+
                     if(isAni){
                         vec3 d_ani = mat3(an[sphereID]) * d;
-                        r = dot(d_ani, d_ani) / (radius_scale * radius_scale);
-                        compare = 1.0f;
-                        hr2 = 1.0f - r;
+                    float r2 = dot(d_ani, d_ani) / rs2;
+                    if(r2 > 1.0f) continue;
+                    hr2 = 1.0f - r2;
                         w *= dets[sphereID];
+                } else {
+                    float r2 = dot(d, d) / rs2;
+                    if(r2 > h*h) continue;
+                    hr2 = h*h - r2;
                     }
-                    if(r > compare) continue;
+                
                     w *= poly6 * hr2 * hr2 * hr2;
                     // Zachování celkové hmotnosti vydělením novým objemem (scale^3)
-                    density += w / (radius_scale * radius_scale * radius_scale);
+                density += w / (rs2 * radius_scale);
                 }
             }
         }
@@ -706,9 +712,17 @@ float calcFluidShadow(vec3 ro, vec3 rd, float maxt) {
     float res = 1.0;
     float t = 0.1; // Větší offset pro začátek, aby bloby nestínily samy sebe
     float k = 4.0; // Hodnota k pro bloby (zkus rozmezí 2.0 až 6.0)
+    
+    vec3 gridEnd = gridStart + vec3(cellsSize) * voxelSize;
 
     for(int i = 0; i < 40 && t < maxt; i++) {
         vec3 p = ro + rd * t;
+        
+        // Pokud paprsek opustí simulační objem, už tam nic tekutého nestíní
+        if (p.x < gridStart.x || p.y < gridStart.y || p.z < gridStart.z ||
+            p.x > gridEnd.x || p.y > gridEnd.y || p.z > gridEnd.z) {
+            break; 
+        }
         
         // Vzorkujeme hustotu s radius_scale = 1.0
         float dens = computeDensityOnly(p, 1.0);
@@ -809,21 +823,30 @@ vec3 getObjectNormal(vec3 xij){
                     
                     vec4 sphere = spheresData[sphereId];
                     vec3 d = xij - sphere.xyz;
-                    float over = h;
-                    float less = 0.0f;
+                    float r2 = 0.0f;
+                    vec3 d_eval = d;
+                    
+                    float over2 = h * h;
+                    float less2 = 0.0f;
+                    
                     if(isAni){
-                        d = mat3(an[sphereId]) * d;
-                        over = 1.0f;
-                        less = 1e-6;
+                        d_eval = mat3(an[sphereId]) * d;
+                        r2 = dot(d_eval, d_eval);
+                        over2 = 1.0f;
+                        less2 = 1e-12f;
+                    } else {
+                        r2 = dot(d, d);
                     }
-                    float r = length(d);
-                    if(r > over || r <= less){
+                    
+                    if(r2 > over2 || r2 <= less2){
                         continue;
                     }
+                    
+                    float r = sqrt(r2); // Odmocninu děláme jen pro body, které skutečně prošly testem (zlomek původního počtu)
+                    float over = isAni ? 1.0f : h;
                     float hr = over - r;
                     float dw = spiky * (hr * hr);
-                    vec3 dir = d / r;
-                    if(isAni) dir = transpose(mat3(an[sphereId])) * d / r;
+                    vec3 dir = isAni ? transpose(mat3(an[sphereId])) * d_eval / r : d / r;
                     grad += dir * dw;
                 }
             }
@@ -892,7 +915,7 @@ void main(){
     // Kontrola, že paprsek míří směrem dolů k podlaze
     if (ray_vdb.dir.y < -0.0001) {
         // Zde můžeš upravit výšku podlahy. Např. + 0.05 ji zvedne o 5 cm
-        float floor_height = - 0.03; 
+        float floor_height = - 0.025; 
         float temp_t = (floor_height - ray_vdb.start.y) / ray_vdb.dir.y;
         if (temp_t > 0.0) {
             t_floor = temp_t;
@@ -1033,7 +1056,7 @@ void main(){
         }
         
         float floorViewZ = (view * vec4(hit_pos, 1.0)).z;
-        float outAlpha = fullRender ? min(shadows[0], shadows[1]) : 1.0f;
+        float outAlpha = fullRender ? (shadows[0] + shadows[1]) * 0.5 : 1.0f;
         imageStore(outTex, pix, vec4(final_floor_color, outAlpha)); // Hodnota stínu do Alpha kanálu
         imageStore(normalDepthTex, pix, vec4(N_floor_view, floorViewZ));
     } else { // Background

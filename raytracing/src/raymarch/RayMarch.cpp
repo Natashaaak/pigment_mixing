@@ -7,8 +7,6 @@
 #include <vector>
 #include "../../../deps/json.hpp"
 
-static GLuint postProcessPingPongTex = 0;
-
 RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     glGenBuffers(1, &spheresSSBO);
     glGenBuffers(1, &pigmentsSSBO);
@@ -351,6 +349,8 @@ void RayMarch::renderTex(Camera* camera) {
     texShader->setUniform("view", camera->getView());
     texShader->setUniform("proj", camera->getProj());
 
+    texShader->setUniform("fullRender", state.fullRender);
+
     glBindVertexArray(quadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
@@ -373,9 +373,10 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     // Pass 2: Generate depth maps & calculate anisotropic matrices
     depthMaps->generateDepthMaps(mpm, ww, wh, camera);
     // Pass 3: Fill pigment grid using the newly computed anisotropic matrices
-    bdg->fillRenderGrid(mpm, a, depthMaps->getc()->getMatrices());
+    if(state.fullRender) {
+        bdg->fillRenderGrid(mpm, a, depthMaps->getc()->getMatrices());
+    }
 
-    // }
     const float transparentClear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     glClearTexImage(outputTex, 0, GL_RGBA, GL_FLOAT, transparentClear);
     glClearTexImage(normalDepthTex, 0, GL_RGBA, GL_FLOAT, clearData);

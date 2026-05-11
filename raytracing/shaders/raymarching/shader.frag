@@ -7,6 +7,7 @@ out vec4 fragColor;
 uniform sampler2D renderedImage;
 uniform sampler2D normalDepthTex;
 uniform mat4 proj;
+uniform bool fullRender;
 
 #define FXAA_REDUCE_MIN   (1.0/128.0)
 #define FXAA_REDUCE_MUL   (1.0/4.0)
@@ -52,9 +53,9 @@ vec3 applyFXAA(sampler2D tex, vec2 fragCoord, vec2 inverseVP) {
 void main(){
     vec2 inverse_resolution = 1.0 / vec2(textureSize(renderedImage, 0));
     vec4 baseColor = texture(renderedImage, texCoord);
-    vec3 fxaaColor = applyFXAA(renderedImage, texCoord, inverse_resolution);
+    vec3 finalColor = fullRender ? applyFXAA(renderedImage, texCoord, inverse_resolution) : baseColor.xyz;
     
-    fragColor = vec4(fxaaColor, baseColor.a);
+    fragColor = vec4(finalColor, baseColor.a);
     
     vec4 nd = texture(normalDepthTex, texCoord);
     if (nd.w < 999.0) { // Pokud paprsek něco zasáhl (w obsahuje viewZ, pozadí má 1000.0)

@@ -92,7 +92,8 @@ void Simulation::G2P(){
             float shear_intensity = S.norm();
             float mix_factor = smoothStep(pigment_D_edge0, pigment_D_edge1, shear_intensity);
             particles.diffusion_factor[p] = mix_factor;
-            mix_factor = std::max(pigment_D_max * mix_factor, 0.0f);
+            // Přidáno násobení dt pro konzistentní rychlost difúze v čase
+            mix_factor = std::min(std::max(pigment_D_max * mix_factor * (float)dt, 0.0f), 1.0f);
 
             particles.pigments[p] = (1.0f - mix_factor) * particles.pigments[p] + mix_factor * grid_pigment_p;
         } // end loop p

@@ -84,20 +84,19 @@ add_executable(GLHydroSurface
 
 # --- Compiler & Linker Options ---
 if(MSVC)
-    target_compile_options(GLHydroSurface PRIVATE /O2 /fp:fast /LTCG)
+    target_compile_options(GLHydroSurface PRIVATE /O2 /fp:fast)
     target_compile_features(GLHydroSurface PRIVATE cxx_std_20)
-    target_link_options(GLHydroSurface PRIVATE /LTCG)
 else()
-    set(COMMON_RELEASE_FLAGS "-O3;-ffast-math;-flto")
+    set(COMMON_RELEASE_FLAGS "-O3;-ffast-math")
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-        set(COMMON_RELEASE_FLAGS "${COMMON_RELEASE_FLAGS};-mcpu=native;-mtune=native")
+        set(COMMON_RELEASE_FLAGS "${COMMON_RELEASE_FLAGS};-mcpu=native;-march=native;-mtune=native")
     endif()
 
     target_compile_options(GLHydroSurface PRIVATE 
         ${COMMON_RELEASE_FLAGS}
         ${OpenMP_CXX_FLAGS}
     )
-    target_link_options(GLHydroSurface PRIVATE -flto -O3)
+    target_link_options(GLHydroSurface PRIVATE -O3)
 endif()
 
 # --- Include Directories ---

@@ -158,8 +158,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vz_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vx_rel = sgn(vx_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vz_rel*vz_rel/(vx_rel*vx_rel));
-                        vz_rel = sgn(vz_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vx_rel*vx_rel/(vz_rel*vz_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vx_rel *= scale;
+                        vz_rel *= scale;
                     }
 
                     // normal component (y) must be set to zero
@@ -180,8 +181,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vz_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vy_rel = sgn(vy_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vz_rel*vz_rel/(vy_rel*vy_rel));
-                        vz_rel = sgn(vz_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vy_rel*vy_rel/(vz_rel*vz_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vy_rel *= scale;
+                        vz_rel *= scale;
                     }
 
                     // normal component (x) must be set to zero
@@ -202,8 +204,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vy_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vx_rel = sgn(vx_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vy_rel*vy_rel/(vx_rel*vx_rel));
-                        vy_rel = sgn(vy_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vx_rel*vx_rel/(vy_rel*vy_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vx_rel *= scale;
+                        vy_rel *= scale;
                     }
 
                     // normal component (z) must be set to zero
@@ -233,8 +236,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vz_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vx_rel = sgn(vx_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vz_rel*vz_rel/(vx_rel*vx_rel));
-                        vz_rel = sgn(vz_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vx_rel*vx_rel/(vz_rel*vz_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vx_rel *= scale;
+                        vz_rel *= scale;
                     }
 
                     // normal component (y) must be set to zero
@@ -254,8 +258,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vz_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vy_rel = sgn(vy_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vz_rel*vz_rel/(vy_rel*vy_rel));
-                        vz_rel = sgn(vz_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vy_rel*vy_rel/(vz_rel*vz_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vy_rel *= scale;
+                        vz_rel *= scale;
                     }
 
                     // normal component (x) must be set to zero
@@ -275,8 +280,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vy_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vx_rel = sgn(vx_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vy_rel*vy_rel/(vx_rel*vx_rel));
-                        vy_rel = sgn(vy_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vx_rel*vx_rel/(vy_rel*vy_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vx_rel *= scale;
+                        vy_rel *= scale;
                     }
 
                     // normal component (z) must be set to zero

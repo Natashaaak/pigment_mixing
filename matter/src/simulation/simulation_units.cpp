@@ -119,10 +119,10 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     blobs(colorRatios, pigments);
 
     ////// FLOOR OBJECTS
-    plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::NoSlip)); 
+    plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::SlipStick, 0.8)); 
 
     ////// SPATULA
-    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.001, "hehe", g_spatula_anim_path);
+    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.4, "hehe", g_spatula_anim_path);
     spatula_ptr = spatula.get();
     objects.push_back(std::move(spatula));
 
@@ -187,7 +187,7 @@ void Simulation::prepareSimulation(){
     e_mu_prefac = 2*q_prefac            * mu;
     f_mu_prefac = 2*q_prefac * q_prefac * mu;
 
-    use_mibf = true;
+    use_mibf = false;
     use_musl = true;
 
     fac_Q = I_ref / (grain_diameter*std::sqrt(rho_s));
