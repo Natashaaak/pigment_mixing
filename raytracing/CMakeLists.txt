@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(GLHydroSurface)
+project(pigment-mixing)
 
 # --- Project Settings ---
 set(CMAKE_CXX_STANDARD 20)
@@ -43,7 +43,7 @@ if(TARGET glfw3 AND NOT TARGET glfw)
 endif()
 
 # --- Executable Definition ---
-add_executable(GLHydroSurface
+add_executable(pigment-mixing
     pch.h
     src/state.cpp
     src/state.h
@@ -84,23 +84,23 @@ add_executable(GLHydroSurface
 
 # --- Compiler & Linker Options ---
 if(MSVC)
-    target_compile_options(GLHydroSurface PRIVATE /O2 /fp:fast)
-    target_compile_features(GLHydroSurface PRIVATE cxx_std_20)
+    target_compile_options(pigment-mixing PRIVATE /O2 /fp:fast)
+    target_compile_features(pigment-mixing PRIVATE cxx_std_20)
 else()
     set(COMMON_RELEASE_FLAGS "-O3;-ffast-math")
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
         set(COMMON_RELEASE_FLAGS "${COMMON_RELEASE_FLAGS};-mcpu=native;-march=native;-mtune=native")
     endif()
 
-    target_compile_options(GLHydroSurface PRIVATE 
+    target_compile_options(pigment-mixing PRIVATE 
         ${COMMON_RELEASE_FLAGS}
         ${OpenMP_CXX_FLAGS}
     )
-    target_link_options(GLHydroSurface PRIVATE -O3)
+    target_link_options(pigment-mixing PRIVATE -O3)
 endif()
 
 # --- Include Directories ---
-target_include_directories(GLHydroSurface PRIVATE 
+target_include_directories(pigment-mixing PRIVATE 
     ${OPENGL_INCLUDE_DIRS} 
     OpenMP::OpenMP_CXX 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -110,7 +110,7 @@ target_include_directories(GLHydroSurface PRIVATE
 )
 
 # --- Linking ---
-target_link_libraries(GLHydroSurface PRIVATE 
+target_link_libraries(pigment-mixing PRIVATE 
     glad::glad 
     OpenGL::GL 
     OpenMP::OpenMP_CXX 
@@ -122,4 +122,4 @@ target_link_libraries(GLHydroSurface PRIVATE
 )
 
 # Precompiled headers
-target_precompile_headers(GLHydroSurface PRIVATE pch.h)
+target_precompile_headers(pigment-mixing PRIVATE pch.h)

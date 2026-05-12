@@ -157,7 +157,7 @@ int createWindow() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SAMPLES, 4); // Přidání 4x MSAA
-    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "GLHydroSurface", nullptr, nullptr);
+    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Pigment Mixing", nullptr, nullptr);
     if (window == nullptr) {
         std::cerr << "ERROR: glfw window not created" << std::endl;
         const char* description;

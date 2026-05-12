@@ -6,15 +6,16 @@ bin/
 **/output/
 **/output_images/
 **/results/
+# Installed dependencies
+vcpkg_installed/
 
-# Dependencies (for Matter)
-deps/**/*
-!deps/json.hpp
-
-
-# Nakonec ignoruj vše uvnitř, kromě tvého souboru
-deps/**/*
-!deps/**/json.hpp
+# External/submodule dependencies
+# Ignoruj celý adresář /deps...
+/deps/
+# ...ale ponech v něm soubor json.hpp
+!/deps/json.hpp
+matter/deps/
+raytracing/external/
 
 # Executables & Libraries
 *.exe
@@ -33,7 +34,10 @@ deps/**/*
 .DS_Store
 
 *:Zone.Identifier
+# Ignoruj všechny .obj soubory (výsledky kompilace)...
 *.obj
+# ...ale ponech soubor s modelem špachtle
+!/data/spatula_handler.obj
 
 # CMake cache
 CMakeCache.txt

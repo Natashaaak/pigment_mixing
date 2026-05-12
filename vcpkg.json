@@ -1,8 +1,9 @@
 {
-  "name": "glhydrosurface",
+  "name": "pigment-mixing-main",
   "version-string": "0.1.0",
   "dependencies": [
     "glad",
-    "glm"
+    "glm",
+    "stb"
   ]
 }

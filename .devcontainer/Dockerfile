@@ -45,7 +45,7 @@ ENV PATH="${PATH}:${VCPKG_ROOT}"
 WORKDIR /workspace
 
 # Copy vcpkg dependencies
-COPY raytracing/vcpkg.json /workspace/vcpkg.json
+COPY vcpkg.json /workspace/vcpkg.json
 
 # Install libraries
 RUN vcpkg install --x-install-root=/workspace/vcpkg_installed
