@@ -8,7 +8,13 @@ bin/
 **/results/
 
 # Dependencies (for Matter)
-**/deps/
+deps/**/*
+!deps/json.hpp
+
+
+# Nakonec ignoruj vše uvnitř, kromě tvého souboru
+deps/**/*
+!deps/**/json.hpp
 
 # Executables & Libraries
 *.exe
