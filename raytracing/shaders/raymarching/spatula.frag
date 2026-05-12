@@ -15,6 +15,7 @@ const float pi = 3.14159265359;
 #include "pbr_lighting.glsl"
 
 uniform Material spatulaMat;
+uniform Material floorMat;
 
 void main() {
     vec3 N = normalize(Normal);
@@ -23,7 +24,7 @@ void main() {
     vec3 color;
     if (fullRender) {
         float shadows[2] = float[](1.0, 1.0); // Mesh špachtle se pro vršek stínuje fallbackem
-        color = computePBRLighting(spatulaMat, WorldPos, N, V, lightDirs, lightColors, shadows);
+        color = computePBRLighting(spatulaMat, floorMat, WorldPos, N, V, lightDirs, lightColors, shadows);
     } else {
         vec3 irradiance = texture(irradianceMap, N).rgb;
         color = spatulaMat.albedo * irradiance;

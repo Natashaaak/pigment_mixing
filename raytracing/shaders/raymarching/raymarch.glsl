@@ -987,8 +987,8 @@ void main(){
                 float brightnessBoost = 2.5; 
                 if (fullRender) {
                     Material fluidMat_colored = fluidMat;
-                    fluidMat_colored.albedo = clamp(surfaceColor * brightnessBoost, 0.0, 1.0);
-                    final_color = computePBRLighting(fluidMat_colored, pos, N_world, V_world, lightDirs, lightColors, shadows);
+                    fluidMat_colored.albedo = clamp(surfaceColor * brightnessBoost, 0.0, 1.0); // Fluid material je předán hodnotou, takže ho můžeme modifikovat
+                    final_color = computePBRLighting(fluidMat_colored, floorMat, pos, N_world, V_world, lightDirs, lightColors, shadows);
                     // Přidání trochy extra fixního ambientního světla pro prosvětlení tmavých záhybů ve stínu
                     final_color += surfaceColor * 0.15;
                 } else {
@@ -1020,7 +1020,7 @@ void main(){
 
         vec3 final_spatula_color;
         if (fullRender) {
-            final_spatula_color = computePBRLighting(spatulaMat, pos_spatula, N_world, V_world, lightDirs, lightColors, shadows);
+            final_spatula_color = computePBRLighting(spatulaMat, floorMat, pos_spatula, N_world, V_world, lightDirs, lightColors, shadows);
         } else {
             vec3 irradiance = texture(irradianceMap, N_world).rgb;
             final_spatula_color = spatula_color * irradiance;
@@ -1051,7 +1051,7 @@ void main(){
 
         vec3 final_floor_color;
         if (fullRender) {
-            final_floor_color = computePBRLighting(floorMat, hit_pos, N_floor, V_world, lightDirs, lightColors, shadows);
+            final_floor_color = computePBRLighting(floorMat, floorMat, hit_pos, N_floor, V_world, lightDirs, lightColors, shadows); // Materiál podlahy je předán jako mat i floorMat
         } else {
             vec3 irradiance = texture(irradianceMap, N_floor).rgb;
             final_floor_color = floor_color * irradiance;

@@ -501,6 +501,35 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     if (mpm->spatulaExists() && spatulaMesh) {
         SpatulaMaterial woodMat = {spatulaWood.albedo, spatulaWood.metallic, spatulaWood.roughness};
         SpatulaMaterial metalMat = {spatulaMetal.albedo, spatulaMetal.metallic, spatulaMetal.roughness};
+
+        // Aktivujeme shader pro špachtli PŘED nastavením textur a uniformů.
+        // Tím zajistíme, že se všechny následující operace vztahují na správný shader program.
+        spatulaShader->use();
+
+        // Navážeme PBR textury, které jsou potřeba pro IBL (Image-Based Lighting).
+        // Bez nich by `texture(irradianceMap, ...)` vracelo černou barvu, což způsobuje černé odlesky.
+        if (hdrTexture) {
+            glActiveTexture(GL_TEXTURE5);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, hdrTexture);
+            spatulaShader->setUniform("hdrMap", 5);
+        }
+        if (irradianceTexture) {
+            glActiveTexture(GL_TEXTURE6);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceTexture);
+            spatulaShader->setUniform("irradianceMap", 6);
+        }
+        if (brdfLUTTexture) {
+            glActiveTexture(GL_TEXTURE7);
+            glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
+            spatulaShader->setUniform("brdfLUT", 7);
+        }
+
+        // Před renderováním meshe špachtle musíme shaderu předat materiál podlahy,
+        // protože pbr_lighting.glsl ho vyžaduje pro správné odrazy.
+        spatulaShader->setUniform("floorMat.albedo", floorMat.albedo);
+        spatulaShader->setUniform("floorMat.metallic", floorMat.metallic);
+        spatulaShader->setUniform("floorMat.roughness", floorMat.roughness);
+
         spatulaMesh->render(spatulaShader, mpm->getSpatulaInvTransform(), camera, state.fullRender, hdrTexture, irradianceTexture, brdfLUTTexture, woodMat, metalMat, lightDirs, lightColors);
     }
     // timer.end();

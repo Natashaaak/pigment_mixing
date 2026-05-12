@@ -50,7 +50,7 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
-vec3 computePBRLighting(Material mat, vec3 worldPos, vec3 N, vec3 V, vec3 lightDirs[2], vec3 lightColors[2], float shadows[2]) {
+vec3 computePBRLighting(Material mat, Material floorMat, vec3 worldPos, vec3 N, vec3 V, vec3 lightDirs[2], vec3 lightColors[2], float shadows[2]) {
     vec3 F0 = vec3(0.04); 
     F0 = mix(F0, mat.albedo, mat.metallic);
     float NdotV = max(dot(N, V), 0.0);
@@ -93,9 +93,29 @@ vec3 computePBRLighting(Material mat, vec3 worldPos, vec3 N, vec3 V, vec3 lightD
     const float MAX_REFLECTION_LOD = 4.0;
     vec3 R = reflect(-V, N);
     vec3 prefilteredColor;
-    if (R.y < 0.0)
-        prefilteredColor = vec3(0.0); // Reflections below horizon hit the floor, which is black/non-reflective
-    else
+    if (R.y < 0.0) {
+        // Reflection ray hits the floor.
+        // Approximate the light reflected from the floor. We can't do a full recursive bounce, so we'll
+        // calculate the lighting on the floor (diffuse only) and use that as the reflected color.
+        // This is much better than just using ambient light, as it includes direct light sources.
+        vec3 floorIrradiance = texture(irradianceMap, vec3(0.0, 1.0, 0.0)).rgb;
+        vec3 floorNormal = vec3(0.0, 1.0, 0.0);
+
+        // Add direct lighting contribution.
+        // NOTE: We are intentionally omitting shadows here for performance. A full shadow
+        // calculation for every reflection would be too slow.
+        vec3 directLighting = vec3(0.0);
+        for (int i = 0; i < 2; i++) {
+            vec3 L = normalize(lightDirs[i]);
+            if (L.y > 0.0) { // Only consider lights from above the floor
+                float NdotL = max(dot(floorNormal, L), 0.0);
+                directLighting += lightColors[i] * NdotL;
+            }
+        }
+
+        // Combine ambient and direct lighting, then multiply by floor albedo (Lambertian diffuse)
+        prefilteredColor = floorMat.albedo * (floorIrradiance + directLighting) / pi;
+    } else
         prefilteredColor = textureLod(hdrMap, R, mat.roughness * MAX_REFLECTION_LOD).rgb;
 
     vec2 brdf  = texture(brdfLUT, vec2(NdotV, mat.roughness)).rg;
