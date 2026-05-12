@@ -34,10 +34,7 @@ raytracing/external/
 .DS_Store
 
 *:Zone.Identifier
-# Ignoruj všechny .obj soubory (výsledky kompilace)...
-*.obj
-# ...ale ponech soubor s modelem špachtle
-!/data/spatula_handler.obj
+matter/**/*.obj
 
 # CMake cache
 CMakeCache.txt
