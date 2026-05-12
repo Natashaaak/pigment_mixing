@@ -58,6 +58,9 @@ vec3 computePBRLighting(Material mat, vec3 worldPos, vec3 N, vec3 V, vec3 lightD
 
     for(int i = 0; i < 2; i++) {
         vec3 L = normalize(lightDirs[i]);
+        // Light from below the horizon is blocked by the infinite floor
+        if (L.y < 0.0) continue;
+
         vec3 H = normalize(V + L);
         float NdotL = max(dot(N, L), 0.0);
         
@@ -80,13 +83,21 @@ vec3 computePBRLighting(Material mat, vec3 worldPos, vec3 N, vec3 V, vec3 lightD
     vec3 kS_ibl = F_ibl;
     vec3 kD_ibl = (1.0 - kS_ibl) * (1.0 - mat.metallic);
     
+    // Diffuse IBL - simulate occlusion from the ground plane
     vec3 irradiance = texture(irradianceMap, N).rgb;
+    // Smoothly fade out light from below to prevent hard edges.
+    irradiance *= (0.5 + 0.5 * N.y);
     vec3 diffuse_ibl = irradiance * mat.albedo / pi;
     
+    // Specular IBL
     const float MAX_REFLECTION_LOD = 4.0;
     vec3 R = reflect(-V, N);
-    vec3 prefilteredColor = textureLod(hdrMap, R, mat.roughness * MAX_REFLECTION_LOD).rgb;    
-    
+    vec3 prefilteredColor;
+    if (R.y < 0.0)
+        prefilteredColor = vec3(0.0); // Reflections below horizon hit the floor, which is black/non-reflective
+    else
+        prefilteredColor = textureLod(hdrMap, R, mat.roughness * MAX_REFLECTION_LOD).rgb;
+
     vec2 brdf  = texture(brdfLUT, vec2(NdotV, mat.roughness)).rg;
     vec3 specular_ibl = prefilteredColor * (F0 * brdf.x + brdf.y);
     

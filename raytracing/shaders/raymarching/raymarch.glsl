@@ -904,7 +904,9 @@ void main(){
     float t_spatula = 1e6; 
     bool hit_spatula = false;
 
+    // TEMP
     if (has_spatula) {
+    // if (false) {
         vec3 p_temp;
         hit_spatula = rayMarchSpatula(ray_vdb, t_spatula, p_temp, 1000.0);
     }

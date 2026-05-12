@@ -331,9 +331,9 @@ void guiStart(bool &start) {
 
     if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
         if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion_blobs.bin";
-        else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/animations/spatula_motion_sweep.bin";
-        else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/animations/spatula_motion_mixing.bin";
-        else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
+        else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
+        else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/animations/spatula_motion_sweep.bin";
+        else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_mixing.bin";
         else if (spatula_anim_idx == 4) g_spatula_anim_path = "../matter/animations/spatula_motion_inf.bin";
 
         start = true;

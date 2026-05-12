@@ -20,6 +20,7 @@ public:
         halfWidth = 0.368; // 1 cm * 36.8 (global scale factor)
         halfLength = 0.736; // 2 cm * 36.8 (global scale factor)
         halfThickness = 0.06; // 5 cm
+        offset = 0.1; 
 
         animation_path = anim_path;
         loadAnimation(animation_path);
@@ -39,48 +40,36 @@ public:
     T sdSpatula(const Eigen::Vector3f& p) const {
         // Půl-rozměry lichoběžníku
         Eigen::Vector2f p2d(std::abs(p.x()), p.z());
-        float b1 = (float)halfWidth;       // Spodní šířka
-        float b2 = (float)halfWidth * 0.25f; // Horní šířka
-        float he = (float)halfLength;       // Polovina výšky (Z)
+        float b1 = (float)(halfWidth + offset);       // Spodní šířka
+        float b2 = (float)(halfWidth + offset) * 0.25f; // Horní šířka
+        float he = (float)(halfLength + offset);       // Polovina výšky (Z)
 
-        // 1. Přesný 2D SDF lichoběžníku (Centrovaný kolem Z=0)
-        Eigen::Vector2f k1(b2, he);
-        Eigen::Vector2f k2(b2 - b1, 2.0f * he);
-        
-        float d_2d;
+        // 1. Výpočet 2D SDF pro tělo lichoběžníku (mezi -he a +he)
+        Eigen::Vector2f p1(b1, -he);
+        Eigen::Vector2f p2(b2, he);
+        Eigen::Vector2f ba = p2 - p1;
+        Eigen::Vector2f pa = p2d - p1;
+        float h = std::max(0.0f, std::min(1.0f, pa.dot(ba) / ba.dot(ba)));
+        float d_side = (pa - ba * h).norm();
+        float inside_x = b1 - (b1 - b2) * (p2d.y() + he) / (2.0f * he);
+        float d_inside = p2d.x() - inside_x;
+        float d_2d = (p2d.x() < inside_x) ? d_inside : d_side;
+
+        // 2. Přepsání d_2d pro oblasti nad a pod tělem (zakulacené konce)
         if (p2d.y() > he) {
             // Oblast půlkruhu: vzdálenost k bodu (0, he) minus poloměr b2
             d_2d = std::sqrt(p2d.x() * p2d.x() + (p2d.y() - he) * (p2d.y() - he)) - b2;
         } else if (p2d.y() < -he) {
-            // Definujeme poloměry elipsy
-            float r_x = (float)halfWidth;        // b1
-            float r_z = 1.5f * (float)halfWidth; // Sjednoceno se shaderem (1.5 * b1)
-            
-            // Relativní souřadnice bodu vůči středu elipsy (0, -he)
+            float r_x = (float)(halfWidth + offset);        // b1
+            float r_z = 1.5f * (float)(halfWidth + offset); // Sjednoceno se shaderem (1.5 * b1)
             Eigen::Vector2f p_rel(p2d.x(), p2d.y() + he);
-            
-            // Aproximace vzdálenosti k elipse
             Eigen::Vector2f r(r_x, r_z);
             float k0 = (p_rel.array() / r.array()).matrix().norm();
             float k1 = (p_rel.array() / (r.array() * r.array())).matrix().norm();
-            
             d_2d = k0 * (k0 - 1.0f) / k1;
-        } else {
-            // Zde potřebujeme spočítat vzdálenost k "nekonečnému" lichoběžníku
-            Eigen::Vector2f p1(b1, -he);
-            Eigen::Vector2f p2(b2, he);
-            Eigen::Vector2f ba = p2 - p1;
-            Eigen::Vector2f pa = p2d - p1;
-            float h = std::max(0.0f, std::min(1.0f, pa.dot(ba) / ba.dot(ba)));
-            float d_side = (pa - ba * h).norm(); // Vzdálenost k šikmé úsečce
-            
-            float inside_x = b1 - (b1 - b2) * (p2d.y() + he) / (2.0f * he);
-            float d_inside = p2d.x() - inside_x;
-            
-            d_2d = (p2d.x() < inside_x) ? d_inside : d_side;
         }
 
-        // 2. Korektní 3D extruze (Tloušťka v ose Y) pro sphere tracing
+        // 3. Korektní 3D extruze (Tloušťka v ose Y) pro sphere tracing
         float d_y = std::abs(p.y()) - (float)halfThickness;
         Eigen::Vector2f w(d_2d, d_y);
         
@@ -273,6 +262,7 @@ public:
     T halfWidth;
     T halfLength;
     T halfThickness;
+    T offset;
 
     T vx_object;
     T vy_object;
