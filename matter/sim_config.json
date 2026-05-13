@@ -7,5 +7,5 @@
     "friction_angle": 5.0,
     "q_cohesion": 500.0,
     "perzyna_exp": 1.0,
-    "perzyna_visc": 0.2
+    "perzyna_visc": 0.4
 }

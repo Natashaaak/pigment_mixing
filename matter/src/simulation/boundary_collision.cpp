@@ -121,13 +121,18 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
 #ifdef THREEDIM
 
     for (auto& obj : plates) {
-        // Špachtle má PŘEDNOST: pokud částice koliduje se špachtlí, ignorujeme podložku
-        if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
-            continue;
-        }
-
         bool colliding = obj->inside(Xi);
         if (colliding) {
+            // Špachtle má PŘEDNOST: pokud částice koliduje se špachtlí, ignorujeme tření podložky (aby po ní barva klouzala),
+            // ale musíme zabránit propadnutí částic dolů skrz dno.
+            if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
+                if (vi(1) < obj->vy_object) {
+                    vi(1) = obj->vy_object;
+                    vi_orig = vi;
+                }
+                continue;
+            }
+
             T vx_rel = vi_orig(0) - obj->vx_object;
             T vy_rel = vi_orig(1) - obj->vy_object;
             T vz_rel = vi_orig(2) - obj->vz_object;
@@ -315,13 +320,18 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
 
 
     for (auto& obj : plates) {
-        // Špachtle má PŘEDNOST: pokud částice koliduje se špachtlí, ignorujeme podložku
-        if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
-            continue;
-        }
-        
         bool colliding = obj->inside(Xi);
         if (colliding) {
+            // Špachtle má PŘEDNOST: pokud částice koliduje se špachtlí, ignorujeme tření podložky,
+            // ale musíme zabránit propadnutí částic dolů.
+            if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
+                if (vi(1) < obj->vy_object) {
+                    vi(1) = obj->vy_object;
+                    vi_orig = vi;
+                }
+                continue;
+            }
+
             T vx_rel = vi_orig(0) - obj->vx_object;
             T vy_rel = vi_orig(1) - obj->vy_object;
 
