@@ -119,10 +119,10 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     blobs(colorRatios, pigments);
 
     ////// FLOOR OBJECTS
-    plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::SlipStick, 0.8)); 
+    plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::SlipStick, 1.0)); 
 
     ////// SPATULA
-    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.4, "hehe", g_spatula_anim_path);
+    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.0, "hehe", g_spatula_anim_path);
     spatula_ptr = spatula.get();
     objects.push_back(std::move(spatula));
 

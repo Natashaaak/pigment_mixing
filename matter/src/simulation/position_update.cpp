@@ -51,6 +51,15 @@ void Simulation::positionUpdate(){
             }
         }
 
+        // Pojistka: částice nesmí propadnout pod podložku (tvrdý limit na y=0).
+        // Jistota pro případ, že numerická chyba při velkém stlačení posune částici dolů.
+        if (particles.x[p](1) < 0.0) {
+            particles.x[p](1) = 0.0;
+            if (particles.v[p](1) < 0.0) {
+                particles.v[p](1) = 0.0;
+            }
+        }
+
         // Change particle positions (and velocities)
         // Can be used as a crude PBC if there are no boundary interactions
         // To be hard-coded depending on application
