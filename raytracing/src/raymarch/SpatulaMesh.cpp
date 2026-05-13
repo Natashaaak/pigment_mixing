@@ -1,7 +1,5 @@
 #include "SpatulaMesh.h"
 #include <spdlog/spdlog.h>
-#include <map>
-#include "../Camera.h"
 #include "../Shader.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -45,12 +43,10 @@ void SpatulaMesh::loadOBJ(const std::string& path) {
     struct Vertex {
         glm::vec3 pos;
         glm::vec3 normal;
-        glm::vec2 texcoord;
+        int material_id; // 0 = metal, 1 = wood
     };
 
-    // Mapa pro roztřídění vrcholů podle material_name
-    std::map<std::string, std::vector<Vertex>> materialToVertices;
-
+    std::vector<Vertex> finalVertices;
     for (size_t s = 0; s < shapes.size(); s++) {
         size_t index_offset = 0;
         for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
@@ -61,11 +57,18 @@ void SpatulaMesh::loadOBJ(const std::string& path) {
             }
 
             int material_id = shapes[s].mesh.material_ids[f];
-            std::string mat_name = "default";
+            int mat_idx_for_shader = 0; // Default to metal
             if (material_id >= 0 && material_id < materials.size()) {
-                mat_name = materials[material_id].name;
-            } else if (material_id >= 0) {
-                mat_name = "material_" + std::to_string(material_id);
+                const std::string& mat_name = materials[material_id].name;
+                if (mat_name.find("wood") != std::string::npos || 
+                    mat_name.find("Wood") != std::string::npos || 
+                    mat_name.find("WOOD") != std::string::npos) {
+                    mat_idx_for_shader = 1; // Wood
+                }
+            }
+            // Fallback for models without clear material names, assuming second material is wood.
+            else if (material_id == 1) {
+                mat_idx_for_shader = 1;
             }
 
             for (size_t v = 0; v < 3; v++) {
@@ -88,103 +91,32 @@ void SpatulaMesh::loadOBJ(const std::string& path) {
                     vertex.normal = {0.0f, 0.0f, 0.0f};
                 }
 
-                if (idx.texcoord_index >= 0) {
-                    vertex.texcoord = {
-                        attrib.texcoords[2 * idx.texcoord_index + 0],
-                        attrib.texcoords[2 * idx.texcoord_index + 1]
-                    };
-                } else {
-                    vertex.texcoord = {0.0f, 0.0f};
-                }
-
-                materialToVertices[mat_name].push_back(vertex);
+                vertex.material_id = mat_idx_for_shader;
+                finalVertices.push_back(vertex);
             }
             index_offset += 3;
         }
     }
 
-    std::vector<Vertex> finalVertices;
-    groups.clear();
-
-    // Sloučení rozdělených vrcholů zpět do jednoho bufferu a vytvoření metadat pro vykreslování
-    for (auto& pair : materialToVertices) {
-        MaterialGroup group;
-        group.material_id = -1;
-        group.material_name = pair.first;
-        group.offset = finalVertices.size();
-        group.count = pair.second.size();
-        groups.push_back(group);
-
-        finalVertices.insert(finalVertices.end(), pair.second.begin(), pair.second.end());
-    }
+    vertex_count = finalVertices.size();
 
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, finalVertices.size() * sizeof(Vertex), finalVertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(Vertex), finalVertices.data(), GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
 
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
-
+    
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texcoord));
+    glVertexAttribIPointer(2, 1, GL_INT, sizeof(Vertex), (void*)offsetof(Vertex, material_id));
 
     glBindVertexArray(0);
 
-    spdlog::info("Loaded OBJ: {} with {} vertices across {} material groups.", path, finalVertices.size(), groups.size());
-}
-
-void SpatulaMesh::render(Shader* shader, const glm::mat4& invSpatulaTransform, Camera* camera, bool fullRender, GLuint hdrTexture, GLuint irradianceTexture, GLuint brdfLUTTexture, const SpatulaMaterial& woodMat, const SpatulaMaterial& metalMat, const glm::vec3 lightDirs[2], const glm::vec3 lightColors[2]) const {
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LESS); // Vykreslí se jen to, co je před fluidem
-    
-    shader->use();
-    
-    shader->setUniform("invSpatulaTransform", invSpatulaTransform);
-    shader->setUniform("view", camera->getView());
-    shader->setUniform("projection", camera->getProj());
-    shader->setUniform("camPos", camera->cameraPos);
-    shader->setUniform("fullRender", fullRender);
-    shader->setUniform("lightDirs[0]", lightDirs[0]);
-    shader->setUniform("lightDirs[1]", lightDirs[1]);
-    shader->setUniform("lightColors[0]", lightColors[0]);
-    shader->setUniform("lightColors[1]", lightColors[1]);
-    
-    if (hdrTexture) { glActiveTexture(GL_TEXTURE5); glBindTexture(GL_TEXTURE_CUBE_MAP, hdrTexture); shader->setUniform("hdrMap", 5); }
-    if (irradianceTexture) { glActiveTexture(GL_TEXTURE6); glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceTexture); shader->setUniform("irradianceMap", 6); }
-    if (brdfLUTTexture) { glActiveTexture(GL_TEXTURE7); glBindTexture(GL_TEXTURE_2D, brdfLUTTexture); shader->setUniform("brdfLUT", 7); }
-
-    glBindVertexArray(vao);
-    int groupIndex = 0;
-    for (const auto& group : groups) {
-        bool isWood = false;
-        if (group.material_name.find("wood") != std::string::npos || 
-            group.material_name.find("Wood") != std::string::npos || 
-            group.material_name.find("WOOD") != std::string::npos) {
-            isWood = true;
-        } else if (group.material_name.find("metal") == std::string::npos && 
-                   group.material_name.find("Metal") == std::string::npos && 
-                   groupIndex == 1) {
-            isWood = true; // Fallback
-        }
-        
-        if (isWood) {
-            shader->setUniform("spatulaMat.albedo", woodMat.albedo);
-            shader->setUniform("spatulaMat.metallic", woodMat.metallic);
-            shader->setUniform("spatulaMat.roughness", woodMat.roughness);
-        } else {
-            shader->setUniform("spatulaMat.albedo", metalMat.albedo);
-            shader->setUniform("spatulaMat.metallic", metalMat.metallic);
-            shader->setUniform("spatulaMat.roughness", metalMat.roughness);
-        }
-        glDrawArrays(GL_TRIANGLES, group.offset, group.count);
-        groupIndex++;
-    }
-    glBindVertexArray(0);
+    spdlog::info("Loaded OBJ: {} with {} vertices.", path, vertex_count);
 }

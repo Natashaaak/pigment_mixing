@@ -179,6 +179,11 @@ uniform Material fluidMat;
 uniform Material spatulaMat;
 uniform Material floorMat;
 
+float ao_range_fluid = 0.05f; // Dosah stínu
+float min_darkness_fluid = 0.2f; // Minimální světlost (0.0 = černá, 1.0 = žádný stín)
+float ao_range_spatula = 0.25f; // Dosah stínu
+float min_darkness_spatula = 0.5f; // Minimální světlost
+
 vec3 mix_latent_to_rgb( ParticlePigment pigments) {
     float c[7] = pigments.c;
     float c00 = c[0]*c[0];
@@ -892,6 +897,42 @@ vec3 computeNormal(vec3 pij, vec3 xij, ivec2 pix, float depth_from_tex){
     return normalize(w * NObjectij + (1 - w)*NScreenxij);
 }
 
+float computeContactShadow(vec3 pos) {
+    float ao = 1.0;
+    
+    // 1. Fluid AO
+    float dist_fluid = 1e6;
+    vec3 p_ao = pos + vec3(0.0, 0.002, 0.0); // Start slightly above floor (2mm)
+    // Zvýšíme počet kroků, aby dosah hledání odpovídal dosahu stínu.
+    // Pokud ao_range_fluid je např. 0.25 (25cm) a krok je 0.005 (5mm), potřebujeme 50 kroků.
+    // Použijeme 60 kroků pro bezpečný rozsah 30cm.
+    for (int i = 0; i < 60; ++i) { 
+        float density_threshold = 0.1; // Použijeme malou pevnou prahovou hodnotu pro detekci tenkých vrstev.
+        float density = computeDensityOnly(p_ao, 1.0);
+        if (density > density_threshold) {
+            dist_fluid = p_ao.y - pos.y;
+            break;
+        }
+        p_ao.y += 0.005; // Krok o 5mm
+    }
+    float t_fluid = clamp(dist_fluid / ao_range_fluid, 0.0, 1.0);
+    float fluid_ao_factor = sqrt(t_fluid); // Ease-out křivka
+    ao = min(ao, mix(min_darkness_fluid, 1.0, fluid_ao_factor));
+
+    // 2. Spatula AO
+    if (has_spatula) {
+        vec3 p_local = (invSpatulaTransform * vec4(pos, 1.0)).xyz;
+        float dist_spatula = sdSpatula(p_local, true);
+        float t_spatula = clamp(dist_spatula / ao_range_spatula, 0.0, 1.0);
+        float spatula_ao_factor = sqrt(t_spatula); // Ease-out křivka
+        ao = min(ao, mix(min_darkness_spatula, 1.0, spatula_ao_factor));
+    }
+
+    // Nelineární průběh pro "hustší" stín u kontaktu
+    // Původní pow(occ, 2.0) je odstraněn, protože mix() a sqrt() už poskytují nelineární průběh.
+    return ao;
+}
+
 // Jednoduchá pseudonáhodná funkce
 float rand(vec2 co) {
     return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
@@ -919,8 +960,8 @@ void main(){
     bool hit_spatula = false;
 
     // TEMP
-    // if (has_spatula) {
-    if (false) {
+    if (has_spatula) {
+    // if (false) {
         vec3 p_temp;
         hit_spatula = rayMarchSpatula(ray_vdb, t_spatula, p_temp, 1000.0);
     }
@@ -1051,17 +1092,23 @@ void main(){
         vec3 floor_color = floorCol.rgb * (0.8 + c * 0.2);
         
         float shadows[2] = {1.0, 1.0};
+        float contactOcc = 1.0;
         if (fullRender) {
+            contactOcc = computeContactShadow(hit_pos);
             for(int s = 0; s < 2; s++) {
                 float rnd = rand(hit_pos.xz * 100.0 + vec2(s * 13.0, s * 17.0));
-                vec3 jitterDir = normalize(lightDirs[s] + (rnd - 0.5) * 0.2);
+                vec3 jitterDir = normalize(lightDirs[s] + (rnd - 0.5) * 0.2);                
+                // Stín z oken (kontaktní stín se aplikuje až na konci)
                 shadows[s] = calcShadow(hit_pos, jitterDir, true);
             }
         }
 
         vec3 final_floor_color;
         if (fullRender) {
-            final_floor_color = computePBRLighting(floorMat, floorMat, hit_pos, N_floor, V_world, lightDirs, lightColors, shadows); // Materiál podlahy je předán jako mat i floorMat
+            final_floor_color = computePBRLighting(floorMat, floorMat, hit_pos, N_floor, V_world, lightDirs, lightColors, shadows);
+            // Aplikace kontaktního stínu (Ambient Occlusion) na finální barvu.
+            // Tím se ztmaví jak přímé, tak nepřímé (ambientní) osvětlení.
+            final_floor_color *= contactOcc;
         } else {
             vec3 irradiance = texture(irradianceMap, N_floor).rgb;
             final_floor_color = floor_color * irradiance;
