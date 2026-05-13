@@ -434,6 +434,8 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("isAni", state.isAni);
     shader->setUniform("showDiffusion", state.showDiffusion);
     shader->setUniform("showNormals", state.showNormals);
+    shader->setUniform("pigment_D_edge0", mpm->getPigmentDEdge0());
+    shader->setUniform("pigment_D_edge1", mpm->getPigmentDEdge1());
     shader->setUniform("sigma_color", state.sigma_color);
     shader->setUniform("sigma_spatial", state.sigma_spatial);
     shader->setUniform("fullRender", state.fullRender);

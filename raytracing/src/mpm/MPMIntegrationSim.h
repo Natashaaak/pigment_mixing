@@ -74,6 +74,10 @@ public:
 
     glm::vec3 getSpatulaDim() const;
 
+    float getPigmentDEdge0() const;
+
+    float getPigmentDEdge1() const;
+
 private:
     Simulation* sim;
     

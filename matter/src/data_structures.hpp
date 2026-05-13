@@ -61,6 +61,7 @@ public:
     std::vector<TV> flip;
     std::vector<T> mass;
     std::vector<T> friction;
+    std::vector<T> shear_intensity;
     T xc;
     T yc;
     #ifdef THREEDIM

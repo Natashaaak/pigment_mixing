@@ -15,6 +15,7 @@ void Simulation::P2G(){
         std::vector<T> grid_mass_local(grid_nodes);
         std::vector<T> grid_friction_local(grid_nodes);
         std::vector<Eigen::Matrix<float, 7, 1>> grid_pigments_local(grid_nodes, Eigen::Matrix<float, 7, 1>::Zero());
+        std::vector<T> grid_shear_intensity_local(grid_nodes, 0.0);
 
         #pragma omp for nowait
         for(int p = 0; p < Np; p++){
@@ -39,6 +40,7 @@ void Simulation::P2G(){
                             grid_mass_local[index]  += weight;
                             grid_v_local[index]     += particles.v[p] * weight;
                             grid_pigments_local[index] += particles.pigments[p] * weight;
+                            grid_shear_intensity_local[index] += particles.diffusion_factor[p] * weight;
                             if (flip_ratio < 0){ // APIC
                                 TV posdiffvec = TV::Zero();
                                 posdiffvec(0) = xi-xp(0);
@@ -59,6 +61,7 @@ void Simulation::P2G(){
                         grid_mass_local[index]  += weight;
                         grid_v_local[index]     += particles.v[p] * weight;
                         grid_pigments_local[index] += particles.pigments[p] * weight;
+                        grid_shear_intensity_local[index] += particles.diffusion_factor[p] * weight;
                         if (flip_ratio < 0){ // APIC
                             TV posdiffvec = TV::Zero();
                             posdiffvec(0) = xi-xp(0);
@@ -79,6 +82,7 @@ void Simulation::P2G(){
                 grid.mass[l]          += grid_mass_local[l];
                 grid.v[l]             += grid_v_local[l];
                 grid.pigments[l]      += grid_pigments_local[l];
+                grid.shear_intensity[l] += grid_shear_intensity_local[l];
                 if (use_mibf)
                     grid.friction[l]  += grid_friction_local[l];
             } // end for l
@@ -96,9 +100,19 @@ void Simulation::P2G(){
         if (mi > 0) {
             grid.v[l] /= mi;
             grid.pigments[l] /= mi;
+            grid.shear_intensity[l] /= mi;
+
+            // Normalizace pigmentů na mřížce pro robustnost proti numerickým chybám.
+            // Tím zajistíme, že data přenášená zpět na částice v G2P kroku jsou také čistá.
+            float pigment_sum = grid.pigments[l].head<4>().sum();
+            // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+            if (pigment_sum > 1e-6f) {
+                grid.pigments[l].head<4>() /= pigment_sum;
+            }
         } else {
             grid.v[l].setZero();
             grid.pigments[l].setZero();
+            grid.shear_intensity[l] = 0.0;
         }
         //grid.v[l] = (mi > 0) ? grid.v[l]/mi : TV::Zero(); // condition ? result_if_true : result_if_false
         if (use_mibf)

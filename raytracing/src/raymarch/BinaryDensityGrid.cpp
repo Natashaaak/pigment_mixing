@@ -264,6 +264,13 @@ void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const s
         float w = tempGrid[i + 7];
         if (w > 0.0f) {
             for (int c = 0; c < 7; ++c) tempGrid[i + c] /= w;
+
+            // Normalizace pigmentů pro robustnost
+            float pigment_sum = tempGrid[i] + tempGrid[i+1] + tempGrid[i+2] + tempGrid[i+3];
+            // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+            if (pigment_sum > 1e-6f) {
+                for (int c = 0; c < 4; ++c) tempGrid[i + c] /= pigment_sum;
+            }
         }
     }
 
@@ -320,6 +327,13 @@ void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const s
         float w = gridPigments[i + 7];
         if (w > 0.0f) {
             for (int c = 0; c < 7; ++c) gridPigments[i + c] /= w;
+
+            // Finální normalizace pigmentů před odesláním do shaderu
+            float pigment_sum = gridPigments[i] + gridPigments[i+1] + gridPigments[i+2] + gridPigments[i+3];
+            // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+            if (pigment_sum > 1e-6f) {
+                for (int c = 0; c < 4; ++c) gridPigments[i + c] /= pigment_sum;
+            }
         }
     }
 }

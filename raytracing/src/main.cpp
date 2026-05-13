@@ -41,18 +41,13 @@ bool screenshotsTaken = false;
 
 extern std::string g_spatula_anim_path;
 int g_num_colors = 2;
-// float g_colors[4][3] = {
-//     {0.959123f, 0.802565f, 0.0356184f}, // Yellow
-//     {0.0771705f, 0.0282698f, 0.24833f}, // Blue
-//     {0.995181f, 0.999781f, 0.997048f}, // White
-//     {0.506f, 0.012f, 0.184f}  // Magenta
-// };
 float g_colors[4][3] = {
-    {0.982f, 0.655f, 0.001f}, // Yellow
-    {0.003f, 0.015f, 0.076f}, // Blue
-    {0.956f, 0.956f, 0.947f}, // White
-    {0.218f, 0.001f, 0.027f}  // Magenta
+    {0.959123f, 0.802565f, 0.0356184f}, // Yellow
+    {0.0771705f, 0.0282698f, 0.24833f}, // Blue
+    {0.995181f, 0.999781f, 0.997048f}, // White
+    {0.506f, 0.012f, 0.184f}  // Magenta
 };
+
 float g_ratios[4] = { 0.5f, 0.5f, 0.0f, 0.0f };
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height) {

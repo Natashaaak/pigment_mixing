@@ -127,6 +127,16 @@ glm::vec3 MPMIntegrationSim::getSpatulaDim() const
     return glm::vec3((float)spatula->halfWidth, (float)spatula->halfThickness, (float)spatula->halfLength);
 }
 
+float MPMIntegrationSim::getPigmentDEdge0() const
+{
+    return sim->pigment_D_edge0;
+}
+
+float MPMIntegrationSim::getPigmentDEdge1() const
+{
+    return sim->pigment_D_edge1;
+}
+
 void MPMIntegrationSim::neighborsByIndex(unsigned i, std::vector<unsigned int> &out) {
     out.clear();
     // Pre-allocate to prevent reallocation overhead during neighbor search.

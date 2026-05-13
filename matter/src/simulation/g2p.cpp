@@ -33,6 +33,7 @@ void Simulation::G2P(){
             TM Bp    = TM::Zero();
             TM L     = TM::Zero();
             Eigen::Matrix<float, 7, 1> grid_pigment_p = Eigen::Matrix<float, 7, 1>::Zero();
+            T grid_shear_intensity_p = 0.0;
 
             for(int i = pn.base_index[0]; i < pn.base_index[0]+4; i++){
                 T xi = grid.x[i];
@@ -58,6 +59,7 @@ void Simulation::G2P(){
                         }
                         L += grid.v[index] * grad.transpose();
                         grid_pigment_p += grid.pigments[index] * weight;
+                        grid_shear_intensity_p += grid.shear_intensity[index] * weight;
                     } // end loop k
         #else
                     unsigned int index = ind(i, j);
@@ -76,6 +78,7 @@ void Simulation::G2P(){
                     }
                     L += grid.v[index] * grad.transpose();
                     grid_pigment_p += grid.pigments[index] * weight;
+                    grid_shear_intensity_p += grid.shear_intensity[index] * weight;
         #endif
                 } // end loop j
             } // end loop i
@@ -87,15 +90,31 @@ void Simulation::G2P(){
                 particles.flip[p] = flipp;
             }
 
-            // Compute the symmetric Rate of Strain tensor S
-            TM S = 0.5f * (L + L.transpose());
-            float shear_intensity = S.norm();
-            float mix_factor = smoothStep(pigment_D_edge0, pigment_D_edge1, shear_intensity);
-            particles.diffusion_factor[p] = mix_factor;
-            // Přidáno násobení dt pro konzistentní rychlost difúze v čase
-            mix_factor = std::min(std::max(pigment_D_max * mix_factor * (float)dt, 0.0f), 1.0f);
+            // --- Symmetric Mixing Logic ---
 
-            particles.pigments[p] = (1.0f - mix_factor) * particles.pigments[p] + mix_factor * grid_pigment_p;
+            // 1. Vypočítáme novou intenzitu smyku pro tuto částici z gradientu rychlosti.
+            //    Tato hodnota se uloží a použije se v P2G v příštím kroku.
+            TM S = 0.5f * (L + L.transpose());
+            float new_shear_intensity = S.norm();
+            // Uložíme surovou intenzitu smyku. smoothStep se aplikuje až na zprůměrovanou hodnotu.
+            particles.diffusion_factor[p] = new_shear_intensity;
+
+            // 2. Pro aktuální míchání použijeme zprůměrovanou hodnotu z mřížky,
+            //    která byla spočítána v P2G.
+            float mix_factor = smoothStep(pigment_D_edge0, pigment_D_edge1, grid_shear_intensity_p);
+            // Přidáno násobení dt pro konzistentní rychlost difúze v čase
+            float scaled_mix_factor = std::min(std::max(pigment_D_max * mix_factor * (float)dt, 0.0f), 1.0f);
+
+            // Symetrická aktualizace: částice se přibližuje k průměrné barvě okolí.
+            // p_new = (1 - mix) * p_old + mix * p_avg
+            particles.pigments[p] = (1.0f - scaled_mix_factor) * particles.pigments[p] + scaled_mix_factor * grid_pigment_p;
+
+            // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+            // Normalizujeme vždy, pokud je přítomen nějaký pigment, abychom opravili numerické chyby.
+            float pigment_sum = particles.pigments[p].head<4>().sum();
+            if (pigment_sum > 1e-6f) {
+                particles.pigments[p].head<4>() /= pigment_sum;
+            }
         } // end loop p
 
     } // end omp paralell

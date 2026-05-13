@@ -7,6 +7,7 @@ void Simulation::resizeGrid(){
     grid.flip.resize(grid_nodes); std::fill( grid.flip.begin(), grid.flip.end(), TV::Zero() );
     grid.mass.resize(grid_nodes); std::fill( grid.mass.begin(), grid.mass.end(), 0.0        );
     grid.pigments.resize(grid_nodes); std::fill( grid.pigments.begin(), grid.pigments.end(), Eigen::Matrix<float, 7, 1>::Zero() );
+    grid.shear_intensity.resize(grid_nodes); std::fill( grid.shear_intensity.begin(), grid.shear_intensity.end(), 0.0 );
     if (use_mibf)
         grid.friction.resize(grid_nodes); std::fill( grid.friction.begin(), grid.friction.end(), 0.0 );
 }

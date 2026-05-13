@@ -146,6 +146,8 @@ uniform bool isAni;
 uniform bool showNormals;
 
 uniform bool showDiffusion;
+uniform float pigment_D_edge0;
+uniform float pigment_D_edge1;
 uniform float sigma_color;
 uniform float sigma_spatial;
 
@@ -518,6 +520,13 @@ vec3 computeFilteredColor(vec3 pos) {
         }
     }
 
+    // Normalizace průměrných pigmentů
+    float mean_pigment_sum = mean.c[0] + mean.c[1] + mean.c[2] + mean.c[3];
+    // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+    if (mean_pigment_sum > 0.00001) {
+        for(int c=0; c<4; ++c) mean.c[c] /= mean_pigment_sum;
+    }
+
     // 2. Výpočet lokálního rozptylu (variance)
     float variance = 0.0;
     for (int j = 0; j < 27; ++j) {
@@ -564,6 +573,14 @@ vec3 computeFilteredColor(vec3 pos) {
         for (int c = 0; c < 7; ++c) {
             final_pigment.c[c] /= totalWeight;
         }
+
+        // Normalizace finálních pigmentů
+        float final_pigment_sum = final_pigment.c[0] + final_pigment.c[1] + final_pigment.c[2] + final_pigment.c[3];
+        // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+        if (final_pigment_sum > 0.00001) {
+            for(int c=0; c<4; ++c) final_pigment.c[c] /= final_pigment_sum;
+        }
+
         return mix_latent_to_rgb(final_pigment);
     } else {
         // Bezpečný fallback na hladkou interpolaci (mean), pokud obě váhy zkolabují
@@ -636,11 +653,16 @@ float computeDensity(vec3 pos, vec3 ray_start, float depth, ivec2 pix, out vec3 
     }
     if(density > iso) { // OPTIMIZATION: Only compute the heavy filtered color if we actually hit the surface, not in the 'halo'
         if (showDiffusion) {
-            if (use_closest_color && found_closest) {
-                outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), p_diffusion[closest_id]);
-            } else {
-                outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), accumulated_diffusion / density);
+            float shear_intensity;
+            if (use_closest_color && found_closest)
+            {
+                shear_intensity = p_diffusion[closest_id];
             }
+            else {
+                shear_intensity = accumulated_diffusion / density;
+            }
+            float mix_factor = smoothstep(pigment_D_edge0, pigment_D_edge1, shear_intensity);
+            outColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), mix_factor);
         } else if (showNormals) {
             float rij = (height * 2.0 * DforRIJ) / (2.0 * abs(depth) * tan(viewAngle / 2.0));
             float w1 = A * length(pos - ray_start);
@@ -708,41 +730,33 @@ float computeDensityOnly(vec3 pos, float radius_scale){
     return density;
 }
 
-float calcFluidShadow(vec3 ro, vec3 rd, float maxt) {
+float calcFluidShadow(vec3 ro, vec3 rd, float maxt, bool is_from_floor) {
     float res = 1.0;
-    float t = 0.1; // Větší offset pro začátek, aby bloby nestínily samy sebe
-    float k = 4.0; // Hodnota k pro bloby (zkus rozmezí 2.0 až 6.0)
-    
-    vec3 gridEnd = gridStart + vec3(cellsSize) * voxelSize;
+    // Dynamický offset: menší pro podlahu (0.02), větší pro self-shadowing (0.1)
+    float t = is_from_floor ? 0.02 : 0.1;
+    float k = 4.0; // Měkost stínu
 
-    for(int i = 0; i < 40 && t < maxt; i++) {
+    // Optimalizace: Tekutina je jen u podlahy, není třeba trasovat daleko.
+    // Omezíme maximální vzdálenost a počet kroků.
+    float effective_maxt = 2.5; // Maximální délka stínu od tekutiny
+    int max_steps = 80;
+
+    for(int i = 0; i < max_steps && t < effective_maxt; i++) {
         vec3 p = ro + rd * t;
-        
-        // Pokud paprsek opustí simulační objem, už tam nic tekutého nestíní
-        if (p.x < gridStart.x || p.y < gridStart.y || p.z < gridStart.z ||
-            p.x > gridEnd.x || p.y > gridEnd.y || p.z > gridEnd.z) {
-            break; 
-        }
         
         // Vzorkujeme hustotu s radius_scale = 1.0
         float dens = computeDensityOnly(p, 1.0);
         
         if (dens > 0.001) {
-            // KLÍČ: Místo binárního testu vytvoříme lineární rampu
-            // Pokud je dens >= iso, d = 0 (úplný stín).
-            // Pokud je dens < iso, d roste (polostín).
             float d = clamp((iso - dens) / iso, 0.0, 1.0);
-            
             res = min(res, k * d / t);
-            
-            // Pokud jsme hluboko uvnitř (vysoká hustota), končíme
-            if(dens > iso * 1.2) return 0.0;
+            if(dens > iso * 1.2) return 0.0; // Uvnitř hustého objemu je plný stín
         }
         
         if(res < 0.01) return 0.0;
 
-        // Pro mřížku je důležitý malý krok, aby paprsek neminul okraje
-        t += voxelSize * 0.7; 
+        // Konzistentní krok pro plynulé stíny, odvozený od 'h'
+        t += h * 0.4; 
     }
     return clamp(res, 0.0, 1.0);
 }
@@ -793,10 +807,10 @@ float calcSpatulaShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     return clamp(res, 0.0, 1.0);
 }
 
-float calcShadow(vec3 ro, vec3 rd) {
+float calcShadow(vec3 ro, vec3 rd, bool is_from_floor) {
     float maxt = 10.0; // Maximální vzdálenost stínování
     float spatShadow = calcSpatulaShadow(ro, rd, 0.05, maxt, 16.0); // k=16 pro měkký penumbra okraj
-    float fluidShadow = calcFluidShadow(ro, rd, maxt);
+    float fluidShadow = calcFluidShadow(ro, rd, maxt, is_from_floor);
     return spatShadow * fluidShadow;
 }
 
@@ -905,8 +919,8 @@ void main(){
     bool hit_spatula = false;
 
     // TEMP
-    if (has_spatula) {
-    // if (false) {
+    // if (has_spatula) {
+    if (false) {
         vec3 p_temp;
         hit_spatula = rayMarchSpatula(ray_vdb, t_spatula, p_temp, 1000.0);
     }
@@ -978,22 +992,18 @@ void main(){
                 float shadows[2] = {1.0, 1.0};
                 if (fullRender) {
                     for(int s = 0; s < 2; s++) {
-                        shadows[s] = calcShadow(pos, normalize(lightDirs[s]));
+                        shadows[s] = calcShadow(pos, normalize(lightDirs[s]), false);
                     }
                 }
                 
                 vec3 final_color;
-                // Zvýšení základního jasu barvy (albeda)
-                float brightnessBoost = 2.5; 
                 if (fullRender) {
                     Material fluidMat_colored = fluidMat;
-                    fluidMat_colored.albedo = clamp(surfaceColor * brightnessBoost, 0.0, 1.0); // Fluid material je předán hodnotou, takže ho můžeme modifikovat
+                    fluidMat_colored.albedo = surfaceColor; // Použijeme barvu přímo jako albedo bez umělého zesílení
                     final_color = computePBRLighting(fluidMat_colored, floorMat, pos, N_world, V_world, lightDirs, lightColors, shadows);
-                    // Přidání trochy extra fixního ambientního světla pro prosvětlení tmavých záhybů ve stínu
-                    final_color += surfaceColor * 0.15;
                 } else {
                     vec3 irradiance = texture(irradianceMap, N_world).rgb;
-                    final_color = clamp(surfaceColor * brightnessBoost, 0.0, 1.0) * irradiance;
+                    final_color = surfaceColor * irradiance;
                 }
 
                 float viewZ = (view * vec4(pos, 1.0)).z;
@@ -1014,7 +1024,7 @@ void main(){
         float shadows[2] = {1.0, 1.0};
         if (fullRender) {
             for(int s = 0; s < 2; s++) {
-                shadows[s] = calcShadow(pos_spatula, normalize(lightDirs[s]));
+                shadows[s] = calcShadow(pos_spatula, normalize(lightDirs[s]), false);
             }
         }
 
@@ -1045,7 +1055,7 @@ void main(){
             for(int s = 0; s < 2; s++) {
                 float rnd = rand(hit_pos.xz * 100.0 + vec2(s * 13.0, s * 17.0));
                 vec3 jitterDir = normalize(lightDirs[s] + (rnd - 0.5) * 0.2);
-                shadows[s] = calcShadow(hit_pos, jitterDir);
+                shadows[s] = calcShadow(hit_pos, jitterDir, true);
             }
         }
 
