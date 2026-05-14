@@ -2,6 +2,7 @@
 
 #include "simulation.hpp"
 #include <omp.h>
+#include <algorithm>
 
 inline float smoothStep(float edge0, float edge1, float x) {
     float t = std::max(0.0f, std::min(1.0f, (x - edge0) / (edge1 - edge0)));
@@ -103,7 +104,7 @@ void Simulation::G2P(){
             //    která byla spočítána v P2G.
             float mix_factor = smoothStep(pigment_D_edge0, pigment_D_edge1, grid_shear_intensity_p);
             // Přidáno násobení dt pro konzistentní rychlost difúze v čase
-            float scaled_mix_factor = std::min(std::max(pigment_D_max * mix_factor * (float)dt, 0.0f), 1.0f);
+            float scaled_mix_factor = std::clamp(pigment_D_max * mix_factor * (float)dt, 0.0f, 1.0f);
 
             // Symetrická aktualizace: částice se přibližuje k průměrné barvě okolí.
             // p_new = (1 - mix) * p_old + mix * p_avg

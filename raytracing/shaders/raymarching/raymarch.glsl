@@ -179,9 +179,9 @@ uniform Material fluidMat;
 uniform Material spatulaMat;
 uniform Material floorMat;
 
-float ao_range_fluid = 0.05f; // Dosah stínu
-float min_darkness_fluid = 0.2f; // Minimální světlost (0.0 = černá, 1.0 = žádný stín)
-float ao_range_spatula = 0.25f; // Dosah stínu
+float ao_range_fluid = 0.20f; // Dosah stínu
+float min_darkness_fluid = 0.1f; // Minimální světlost (0.0 = černá, 1.0 = žádný stín)
+float ao_range_spatula = 0.15f; // Dosah stínu
 float min_darkness_spatula = 0.5f; // Minimální světlost
 
 vec3 mix_latent_to_rgb( ParticlePigment pigments) {
@@ -902,22 +902,21 @@ float computeContactShadow(vec3 pos) {
     
     // 1. Fluid AO
     float dist_fluid = 1e6;
-    vec3 p_ao = pos + vec3(0.0, 0.002, 0.0); // Start slightly above floor (2mm)
-    // Zvýšíme počet kroků, aby dosah hledání odpovídal dosahu stínu.
-    // Pokud ao_range_fluid je např. 0.25 (25cm) a krok je 0.005 (5mm), potřebujeme 50 kroků.
-    // Použijeme 60 kroků pro bezpečný rozsah 30cm.
+    vec3 p_ao = pos + vec3(0.0, 0.002, 0.0); // Začneme mírně nad podlahou
+
+    // Prohledáváme prostor směrem nahoru a hledáme první bod, kde hustota překročí 'iso'.
+    // Tím zajistíme, že stín vrhá pouze hmota, která je viditelná i v hlavním renderu.
     for (int i = 0; i < 60; ++i) { 
-        float density_threshold = 0.1; // Použijeme malou pevnou prahovou hodnotu pro detekci tenkých vrstev.
         float density = computeDensityOnly(p_ao, 1.0);
-        if (density > density_threshold) {
+        if (density > iso) { // Používáme stejnou prahovou hodnotu jako pro renderování
             dist_fluid = p_ao.y - pos.y;
             break;
         }
         p_ao.y += 0.005; // Krok o 5mm
     }
-    float t_fluid = clamp(dist_fluid / ao_range_fluid, 0.0, 1.0);
-    float fluid_ao_factor = sqrt(t_fluid); // Ease-out křivka
-    ao = min(ao, mix(min_darkness_fluid, 1.0, fluid_ao_factor));
+    float t_fluid = clamp(dist_fluid / ao_range_fluid, 0.0, 1.0); // Normalizujeme vzdálenost na [0,1]
+    float fluid_ao_factor = sqrt(t_fluid); // Ease-out křivka pro plynulý přechod
+    ao = min(ao, mix(min_darkness_fluid, 1.0, fluid_ao_factor)); // Smícháme mezi plnou tmavostí a žádným stínem
 
     // 2. Spatula AO
     if (has_spatula) {

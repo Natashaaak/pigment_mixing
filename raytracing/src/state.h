@@ -50,8 +50,8 @@ struct State {
     bool isAni = true;
     bool testAllFilled = false;
     bool showDiffusion = false;
-    float sigma_color = 0.2f;
-    float sigma_spatial = 0.5f;
+    float sigma_color = 0.05f;
+    float sigma_spatial = 0.35f;
     bool showNormals = false;
     std::vector<uint> aa{1u, 2u, 4u};
     std::vector<float> fonts{10.0f, 12.0f, 14.0f, 16.0f, 18.0f, 20.0f, 22.0f, 24.0f};

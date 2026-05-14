@@ -478,7 +478,7 @@ void gui() {
     ImGui::Spacing();
     if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("Show Diffusion (Red/Blue)", &state.showDiffusion);
-        ImGui::SliderFloat("Sigma Color", &state.sigma_color, 0.01f, 2.0f);
+        ImGui::SliderFloat("Sigma Color", &state.sigma_color, 0.01f, 1.0f);
         ImGui::SliderFloat("Sigma Spatial", &state.sigma_spatial, 0.01f, 10.0f);
         ImGui::Checkbox("Show Normals blending (Red/Blue)", &state.showNormals);
     }
