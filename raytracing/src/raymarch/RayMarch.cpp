@@ -466,6 +466,7 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("lightColors[0]", finalLightColors[0]);
     shader->setUniform("lightColors[1]", finalLightColors[1]);
 
+    ctimer.end(1);
     GLuint groupCountX = (ww + state.groupSizeRayMarching.x - 1) / state.groupSizeRayMarching.x;
     GLuint groupCountY = (wh + state.groupSizeRayMarching.y - 1) / state.groupSizeRayMarching.y;
     // glBeginQuery(GL_TIME_ELAPSED, timer.queries[1]);

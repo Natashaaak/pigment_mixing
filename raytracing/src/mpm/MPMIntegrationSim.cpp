@@ -2,6 +2,7 @@
 #include "../raymarch/BinaryDensityGrid.h"
 #include "../raymarch/AABBc.h"
 #include <algorithm>
+#include <iostream>
 #include "mixbox.h"
 
 MPMIntegrationSim::MPMIntegrationSim(){
@@ -47,6 +48,54 @@ void MPMIntegrationSim::simStep(){
 
 bool MPMIntegrationSim::isTimeToRender() {
     return sim->frameFinished();
+}
+
+bool MPMIntegrationSim::isFinished() const {
+    return sim->isFinished();
+}
+
+void MPMIntegrationSim::calculateAndPrintFinalColor() const {
+    if (sim == nullptr || sim->Np == 0) {
+        std::cout << "No particles to sample." << std::endl;
+        return;
+    }
+
+    Eigen::Matrix<float, 7, 1> average_pigment = Eigen::Matrix<float, 7, 1>::Zero();
+    int sampled_particles_count = 0;
+
+    const TV center(0.0, 0.1, 0.0); // Center of an infinitely tall cylinder
+    const T radius = 0.2; // Cylinder radius (diameter 0.5)
+    const T radius_sq = radius * radius;
+
+    const Particles& sim_particles = sim->particles;
+
+    for (unsigned int i = 0; i < sim->Np; ++i) {
+        if (!sim_particles.active[i]) {
+            continue;
+        }
+
+        const TV& pos = sim_particles.x[i];
+        T dist_xz_sq = (pos(0) - center(0)) * (pos(0) - center(0)) + (pos(2) - center(2)) * (pos(2) - center(2));
+
+        if (dist_xz_sq <= radius_sq) {
+            average_pigment += sim_particles.pigments[i];
+            sampled_particles_count++;
+        }
+    }
+
+    if (sampled_particles_count > 0) {
+        average_pigment /= (float)sampled_particles_count;
+
+        float final_rgb[3];
+        mixbox_latent_to_srgb32f(average_pigment.data(), &final_rgb[0], &final_rgb[1], &final_rgb[2]);
+
+        std::cout << "\n--------------------------------------------------" << std::endl;
+        std::cout << "Final Mixed Color (from " << sampled_particles_count << " particles sampled):" << std::endl;
+        std::cout << "R: " << final_rgb[0] << ", G: " << final_rgb[1] << ", B: " << final_rgb[2] << std::endl;
+        std::cout << "--------------------------------------------------" << std::endl;
+    } else {
+        std::cout << "No particles found in the sampling cylinder." << std::endl;
+    }
 }
 
 float MPMIntegrationSim::getRadius() {

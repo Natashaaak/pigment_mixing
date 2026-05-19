@@ -13,14 +13,14 @@ class ObjectSpatula : public ObjectGeneral{
 public:
     ~ObjectSpatula(){}
 
-    ObjectSpatula(BC bc_in = BC::NoSlip, T friction_in = 0.0, std::string name_in = "", std::string anim_path = "../matter/animations/spatula_motion_squish.bin") : ObjectGeneral(bc_in, friction_in, name_in) {
+    ObjectSpatula(BC bc_in = BC::NoSlip, T friction_in = 0.0, std::string name_in = "", std::string anim_path = "../matter/animations/spatula_motion.bin") : ObjectGeneral(bc_in, friction_in, name_in) {
         transform.setIdentity();
         invTransform.setIdentity();
 
         halfWidth = 0.368; // 1 cm * 36.8 (global scale factor)
         halfLength = 0.736; // 2 cm * 36.8 (global scale factor)
-        halfThickness = 0.06; // 5 cm
-        offset = 0.1; 
+        halfThickness = 0.07; // 5 cm
+        offset = 0.05; 
 
         animation_path = anim_path;
         loadAnimation(animation_path);
@@ -181,10 +181,10 @@ public:
         float floatIndex = (float)currentTime * animation_fps; // 60 FPS export
         int i0_unwrapped = static_cast<int>(std::floor(floatIndex));
 
-        // Loop the animation
+        // Stop at the end of animation
         const int num_frames = animation_data.size();
-        int i0 = i0_unwrapped % num_frames;
-        int i1 = (i0_unwrapped + 1) % num_frames;
+        int i0 = std::min(i0_unwrapped, num_frames - 1);
+        int i1 = std::min(i0_unwrapped + 1, num_frames - 1);
 
         float t = floatIndex - (float)i0_unwrapped;
 

@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <sstream>
 #include <chrono>
+#include <cmath>
 #include <iomanip>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -33,7 +34,7 @@ GLFWwindow* window;
 
 RayMarch *rm;
 Camera *camera;
-MPMIntegrationSim *mpm;
+MPMIntegrationSim *mpm = nullptr;
 AABBc *a;
 char outputDir[256] = "output_images";
 bool takeScreenshot = false;
@@ -82,7 +83,6 @@ void saveImage(const std::string& directory, GLFWwindow* win) {
         }
         std::string filepath = directory.empty() ? filename : directory + "/" + filename;
         if (stbi_write_png(filepath.c_str(), width, height, 3, flippedPixels.data(), width * 3)) {
-            if (frame_counter % 60 == 1) debug("Saved image to ", filepath);
             screenshotsTaken = true;
         } else {
             debug("Failed to open file for image saving: ", filepath);
@@ -222,19 +222,29 @@ void clearWindow() {
 void renderSpheres(bool firstRender = false) {
     if(!firstRender && !mpm->isTimeToRender() && state.play) return;
 
+    timer.update();
+
     if (state.play && !firstRender) {
-        std::cout << "\nSnímek nasimulován za: " << frame_sim_time_ms << " ms" << std::endl;
+        float gpu_prep_time = ctimer.rbh[1].last() + ctimer.rbh[3].last();
+        float render_time = timer.rbh[0].last();
+        std::cout << "Snímek " << mpm->getFrame() << " nasimulován za: " << frame_sim_time_ms << " ms"
+                  << ", Data prep: " << gpu_prep_time << " ms"
+                  << ", Render: " << render_time << " ms" << std::endl;
         frame_sim_time_ms = 0.0;
     }
 
     clearWindow();
+    ctimer.start(3);
     mpm->recountParticles();
+    ctimer.end(3);
 
     int ww, wh;
     glfwGetFramebufferSize(window, &ww, &wh);
     auto& spheresData = mpm->getParticles();
 
+    timer.start(0);
     rm->march(ww, wh, mpm, camera);
+    timer.end(0);
 
     if (takeScreenshot && state.play) {
         saveImage(outputDir, window);
@@ -301,8 +311,9 @@ void guiStart(bool &start) {
         ImGui::SameLine();
         
         float max_ratio = 1.0f - 0.1f * (g_num_colors - 1);
-        if (ImGui::SliderFloat("Ratio", &g_ratios[i], 0.1f, max_ratio, "Vol Ratio: %.05f")) {
-            g_ratios[i] = std::max(0.1f, std::min(g_ratios[i], max_ratio)); // Ensure strict bounds on manual input
+        if (ImGui::SliderFloat("Ratio", &g_ratios[i], 0.1f, max_ratio, "Vol Ratio: %.2f")) {
+            g_ratios[i] = roundf(g_ratios[i] * 100.0f) / 100.0f;
+            g_ratios[i] = std::max(0.1f, std::min(g_ratios[i], max_ratio)); // Ensure strict bounds on manual input after rounding
 
             float rest_sum = 0.0f;
             for (int j = 0; j < g_num_colors; ++j) if (i != j) rest_sum += g_ratios[j];
@@ -325,7 +336,7 @@ void guiStart(bool &start) {
     ImGui::Dummy(ImVec2(0, 20));
 
     if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
-        if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion_blobs.bin";
+        if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion.bin";
         else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
         else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/animations/spatula_motion_sweep.bin";
         else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_mixing.bin";
@@ -518,7 +529,9 @@ void gui() {
     ImGui::End();
 
     ImGui::Render();
+    timer.start(1);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    timer.end(1);
 }
 
 int mainComputeLoop() {
@@ -529,8 +542,6 @@ int mainComputeLoop() {
     ctimer.init();
     bool startScene = false;
     while(!glfwWindowShouldClose(window)) {
-        if (startScene)
-            timer.update();
         if (!startScene) {
             clearWindow();
 
@@ -546,11 +557,13 @@ int mainComputeLoop() {
             }
         }
         else {
+            if (mpm->isFinished()) {
+                glfwSetWindowShouldClose(window, true);
+                continue;
+            }
             sim();
-            timer.start();
             renderSpheres();
             gui();
-            timer.end();
         }
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -559,6 +572,12 @@ int mainComputeLoop() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     timer.clear();
+
+    // Calculate and print the final mixed color
+    if (mpm) {
+        mpm->calculateAndPrintFinalColor();
+    }
+
     delete mpm;
     delete camera;
     delete rm;
@@ -566,7 +585,6 @@ int mainComputeLoop() {
     glfwTerminate();
 
     if (takeScreenshot || screenshotsTaken) {
-        std::cout << "Creating video from screenshots..." << std::endl;
         auto now = std::chrono::system_clock::now();
         auto in_time_t = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
@@ -574,16 +592,17 @@ int mainComputeLoop() {
         std::string timestamp = ss.str();
         // Příkaz pro vytvoření MP4 videa s kodekem H.264, který je široce kompatibilní.
         // -pix_fmt yuv420p je důležitý pro kompatibilitu s většinou přehrávačů.
-        std::string cmd = "ffmpeg -y -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png -vf \"pad=ceil(iw/2)*2:ceil(ih/2)*2\" -c:v libx264 -pix_fmt yuv420p " + std::string(outputDir) + "/animation_" + timestamp + ".mp4";
+        std::string cmd = "ffmpeg -y -loglevel quiet -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png -vf \"pad=ceil(iw/2)*2:ceil(ih/2)*2\" -c:v libx264 -pix_fmt yuv420p " + std::string(outputDir) + "/animation_" + timestamp + ".mp4";
         int ret = system(cmd.c_str());
         if (ret == 0) {
-            std::cout << "Video created successfully. Deleting PNG sequence..." << std::endl;
+            int frame_count = 0;
             for (const auto& entry : std::filesystem::directory_iterator(outputDir)) {
                 if (entry.path().extension() == ".png") {
+                    frame_count++;
                     std::filesystem::remove(entry.path());
                 }
             }
-            std::cout << "Screenshots deleted." << std::endl;
+            std::cout << "Video created from " << frame_count << " frames and screenshots deleted." << std::endl;
         } else {
             std::cerr << "Failed to create video. Make sure ffmpeg is installed on your system and libx264 is available." << std::endl;
         }

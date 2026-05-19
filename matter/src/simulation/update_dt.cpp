@@ -15,9 +15,9 @@ void Simulation::updateDt(){
     }
     T max_speed = std::sqrt(max_speed_sq);
 
-    if (max_speed >= wave_speed){
-        debug("               FYI the particle speed ", max_speed, " is larger than elastic wave speed ", wave_speed);
-    }
+    // if (max_speed >= wave_speed){
+    //     debug("               FYI the particle speed ", max_speed, " is larger than elastic wave speed ", wave_speed);
+    // }
 
 #ifdef WARNINGS
     debug("               dt_max = ", dt_max);
@@ -39,7 +39,6 @@ void Simulation::updateDt(){
     dt = std::min(dt, frame_dt*(frame+1) - time);
     // dt = std::min(dt, final_time         - time);
     dt = std::max(dt, min_dt);
-    debug("               dt     = ", dt);
 
 #ifdef WARNINGS
     debug("               dt     = ", dt);

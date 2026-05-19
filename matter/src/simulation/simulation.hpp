@@ -36,7 +36,8 @@ public:
 #endif
 
   unsigned int n_threads = 1; // number of OMP threads
-  unsigned int end_frame = 1; // last frame in the simulation
+  unsigned int end_frame = 10; // last frame in the simulation
+  unsigned int frame = 0;
 
   bool is_initialized = false;
   bool save_sim = true;
@@ -172,6 +173,7 @@ public:
   void prepareSimulation();
   void step();
   bool frameFinished();
+  bool isFinished() const;
 
   int getMorphPair(float targetVolume);
   float findTForExactVolume(typename ObjectVdb::GridT::Ptr gridA, typename ObjectVdb::GridT::Ptr gridB, float factorA, float factorB, float targetVolume);
@@ -182,7 +184,6 @@ public:
   private:
 
   unsigned int current_time_step = 0;
-  unsigned int frame = 0;
 
   T time = 0;
   T runtime_p2g = 0;

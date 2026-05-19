@@ -6,7 +6,7 @@
 #include "../objects/object_spatula.hpp"
 #include "../../deps/json.hpp"
 
-std::string g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
+std::string g_spatula_anim_path = "../matter/animations/spatula_motion.bin";
 
 void Simulation::initializeBasic(std::string name){
     std::cout << "-----------------------------------------------------------------------------------" << std::endl;
@@ -79,7 +79,7 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     }
 
     reduce_verbose = true;
-    end_frame = 20;     // last frame to simulate
+    end_frame = 1800;   // last frame to simulate
     fps = fps_value;    // frames per second
     n_threads = 12;      // number of threads in parallel
 
@@ -223,6 +223,7 @@ void Simulation::prepareSimulation(){
 
     time = 0;
     frame = 0;
+    final_time = end_frame * frame_dt;
 }
 
 void Simulation::step(){
@@ -242,10 +243,10 @@ void Simulation::step(){
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     runtime_total += std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
     
-    T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
-    std::cout << "Frame: "               << frame              << std::endl;
-    std::cout << "               Time: " << time   << " -> "   << (frame+1)*frame_dt << std::endl;
-    std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step";
+    // T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
+    // std::cout << "Frame: "               << frame              << std::endl;
+    // std::cout << "               Time: " << time   << " -> "   << (frame+1)*frame_dt << std::endl;
+    // std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step";
     
     // debug("Runtime P2G     = ", (runtime_p2g     * 1000.0) / steps, " milliseconds");
     // debug("Runtime G2P     = ", (runtime_g2p     * 1000.0) / steps, " milliseconds");
@@ -259,6 +260,10 @@ bool Simulation::frameFinished(){
         return true;
     }
     return false;
+}
+
+bool Simulation::isFinished() const {
+    return frame >= end_frame || time >= final_time;
 }
 
 std::pair<std::vector<T>, std::vector<T>> Simulation::getGridBoundaries() const {

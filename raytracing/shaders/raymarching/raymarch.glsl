@@ -179,8 +179,8 @@ uniform Material fluidMat;
 uniform Material spatulaMat;
 uniform Material floorMat;
 
-float ao_range_fluid = 0.20f; // Dosah stínu
-float min_darkness_fluid = 0.1f; // Minimální světlost (0.0 = černá, 1.0 = žádný stín)
+float ao_range_fluid = 0.30f; // Dosah stínu
+float min_darkness_fluid = 0.05f; // Minimální světlost (0.0 = černá, 1.0 = žádný stín)
 float ao_range_spatula = 0.15f; // Dosah stínu
 float min_darkness_spatula = 0.5f; // Minimální světlost
 
@@ -227,6 +227,9 @@ vec2 rotateY(vec2 v, float a) {
 }
 
 float sdSpatula(vec3 p, bool with_handle) {
+    // Posun špachtle o 0.1 nahoru v ose Y.
+    p.y -= 0.02;
+
     float b1 = spatulaDim.x;           // Spodní šířka (poloměr)
     float b2 = spatulaDim.x * 0.25;    // Horní šířka (poloměr)
     float he = spatulaDim.z;           // Polovina výšky (Z)

@@ -17,6 +17,8 @@ public:
 
     void simStep();
     bool isTimeToRender();
+    bool isFinished() const;
+    void calculateAndPrintFinalColor() const;
     void setupScene();
 
     /**
@@ -77,6 +79,8 @@ public:
     float getPigmentDEdge0() const;
 
     float getPigmentDEdge1() const;
+
+    int getFrame() const { return sim->frame; };
 
 private:
     Simulation* sim;

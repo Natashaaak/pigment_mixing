@@ -43,60 +43,73 @@ struct RingBufHist {
     float getMin() const {
         return min;
     }
+    float last() const {
+        if (inUse == 0) return 0.0f;
+        return v[(id + N - 1) % N];
+    }
 };
 
 struct GpuPassTimer {
-    static const unsigned N = 120;
+    static const unsigned N_PASSES = 2;
+    static const unsigned N_FRAMES = 120;
     int currFrame = 0;
-    RingBufHist buf{"Whole GPU pass"};
-    std::vector<GLuint> queries;
+    std::vector<RingBufHist> rbh;
+    std::vector<std::vector<GLuint>> queries;
     void init() {
-        queries.resize(N, 0);
-        glGenQueries(N, queries.data());
+        queries.resize(N_PASSES);
+        for (unsigned i = 0; i < N_PASSES; ++i) {
+            queries[i].resize(N_FRAMES, 0);
+            glGenQueries(N_FRAMES, queries[i].data());
+        }
+        rbh.emplace_back("Rendering (GPU)");
+        rbh.emplace_back("GUI (GPU)");
     }
-    void start() {
-        glBeginQuery(GL_TIME_ELAPSED, queries[currFrame]);
+    void start(unsigned id) {
+        if (id >= N_PASSES) return;
+        glBeginQuery(GL_TIME_ELAPSED, queries[id][currFrame]);
     }
-    void end() {
+    void end(unsigned id) {
+        if (id >= N_PASSES) return;
         glEndQuery(GL_TIME_ELAPSED);
     }
     void update() {
-        int prev = (currFrame + N - 1) % N;
-        GLint done = 0;
-        glGetQueryObjectiv(queries[prev], GL_QUERY_RESULT_AVAILABLE, &done);
-        if (done == 0) {
-            spdlog::debug("GPU did not finish computes for {}", buf.name);
-        }
-        else {
+        int prev = (currFrame + N_FRAMES - 1) % N_FRAMES;
+        for (unsigned i = 0; i < N_PASSES; ++i) {
+             // This is a blocking call. It will stall the CPU until the GPU result is available.
+            // This provides accurate, non-delayed timing at the cost of performance.
             GLuint64 ns = 0;
-            glGetQueryObjectui64v(queries[prev], GL_QUERY_RESULT, &ns);
-            // if (state.play)
-            buf.add(ns / 1e6f);
+            glGetQueryObjectui64v(queries[i][prev], GL_QUERY_RESULT, &ns);
+            if (state.play)
+                rbh[i].add(ns / 1e6f);
         }
-        currFrame = (currFrame + 1) % N;
+        currFrame = (currFrame + 1) % N_FRAMES;
     }
     void plotLine() {
-        const char* name = buf.name;
-        float avg = buf.avg();
-        ImGui::SeparatorText(name);
-        ImGui::Text("avg: %.3f ms", avg);
-        ImGui::Text("Worst time in the last %d frames: %.3f ms", buf.N ,buf.max);
-        ImGui::PlotLines(name, buf.v.data(), buf.N, buf.id, nullptr, 0.0f, buf.max);
-        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 200, 0, 255));
-        ImGui::Text("Average time for the whole GPU pass is: %.3f ms", avg);
-        ImGui::PopStyleColor();
+        for (auto& buf : rbh) {
+            ImGui::SeparatorText(buf.name);
+            ImGui::Text("avg: %.3f ms", buf.avg());
+            ImGui::Text("Worst time: %.3f ms", buf.max);
+            ImGui::PlotLines(buf.name, buf.v.data(), buf.N, buf.id, nullptr, 0.0f, buf.max);
+        }
     }
-    void clear() {glDeleteQueries(N, queries.data());}
+    void clear() {
+        for (unsigned i = 0; i < N_PASSES; ++i)
+            if (!queries[i].empty())
+                glDeleteQueries(N_FRAMES, queries[i].data());
+        queries.clear();
+    }
 };
 
 struct CpuPassTimer {
-    static const unsigned N = 4;
+    static const unsigned N = 5;
     std::vector<RingBufHist> rbh;
     std::vector<std::pair<std::chrono::high_resolution_clock::time_point, std::chrono::high_resolution_clock::time_point>> se;
     void start(unsigned id) {
+        if (id >= se.size()) return;
         se[id].first = std::chrono::high_resolution_clock::now();
     }
     void end(unsigned id) {
+        if (id >= se.size()) return;
         se[id].second = std::chrono::high_resolution_clock::now();
         if (state.play)
             rbh[id].add(std::chrono::duration<float, std::milli>(se[id].second - se[id].first).count());
@@ -104,9 +117,10 @@ struct CpuPassTimer {
     void init() {
         se.resize(N);
         rbh.emplace_back("Simulation step");
-        rbh.emplace_back("Binary Density Grid");
+        rbh.emplace_back("GPU Data Prep");
         rbh.emplace_back("Classification");
-        rbh.emplace_back("Adding particles");
+        rbh.emplace_back("Particle Marshalling");
+        rbh.emplace_back("Adding particles"); // This seems unused but I will leave it
         // rbh.emplace_back("Whole frame");
     }
     void plotLine() {
@@ -116,7 +130,6 @@ struct CpuPassTimer {
             float avg = buf.avg();
             cpuPassTime += avg;
             ImGui::SeparatorText(name);
-            ImGui::Text("%s", name);
             ImGui::Text("avg: %.3f ms", avg);
             ImGui::Text("Worst time: %.3f ms", buf.max);
             ImGui::PlotLines(name, buf.v.data(), buf.N, buf.id, nullptr, 0.0f, buf.max);
