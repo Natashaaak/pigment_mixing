@@ -19,7 +19,7 @@ public:
     bool isTimeToRender();
     bool isFinished() const;
     void calculateAndPrintFinalColor() const;
-    void setupScene();
+    void setupScene(int fps);
 
     /**
      * Returns radius of a single particle, every particle shares the same radius

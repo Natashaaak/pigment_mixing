@@ -11,6 +11,11 @@
 #ifndef STATE_H
 #define STATE_H
 
+
+/////////////// USER PARAMETERS (GLOBAL) //////////
+// #define MEASURE_TIME 
+///////////////////////////////////////////////////
+
 #pragma once
 struct State {
     float iso = 9285.0f;
@@ -57,6 +62,11 @@ struct State {
     std::vector<float> fonts{10.0f, 12.0f, 14.0f, 16.0f, 18.0f, 20.0f, 22.0f, 24.0f};
     int fontChoice = 3;
     glm::vec2 params = {0.75, 0.74}; //a and b params for BDG filling from the paper
+
+    char outputDir[256] = "output_images";
+    bool takeScreenshot = false;
+    bool screenshotsTaken = false;
+    int FPS = 30;
 };
 
 extern State state;

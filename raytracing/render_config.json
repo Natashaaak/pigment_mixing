@@ -3,6 +3,13 @@
     "position": [0.0, 3.5, -2.0],
     "target": [0.0, 0.0, 0.0]
   },
+  "simulation": {
+    "fps": 30,
+    "animation": "../matter/animations/spatula_motion.bin"
+  },
+  "environment": {
+    "skymap": "data/SkyMap.hdr"
+  },
   "materials": {
     "fluid": {
       "albedo": [1.0, 1.0, 1.0],
@@ -24,5 +31,17 @@
       "metallic": 0.0,
       "roughness": 0.4
     }
-  }
+  },
+  "lights": [
+    {
+      "direction": [0.9096, 0.4466, 0.3660],
+      "color": [1.0, 1.0, 1.0],
+      "intensity": 2.0
+    },
+    {
+      "direction": [-0.2853, 0.4466, 0.9380],
+      "color": [1.0, 1.0, 1.0],
+      "intensity": 0.5
+    }
+  ]
 }

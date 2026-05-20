@@ -96,7 +96,12 @@ public:
             glUniform4fv(location, 1, &value[0]);
         }
         else if constexpr (std::is_same_v<T, std::vector<glm::vec3>>) {
-            glUniform3fv(location, value.size(), &value[0][0]);
+            if (!value.empty())
+                glUniform3fv(location, value.size(), &value[0][0]);
+        }
+        else if constexpr (std::is_same_v<T, std::vector<float>>) {
+            if (!value.empty())
+                glUniform1fv(location, value.size(), value.data());
         }
         else if constexpr (std::is_same_v<T, glm::mat4>) {
             glUniformMatrix4fv(location, 1, GL_FALSE, &value[0][0]);

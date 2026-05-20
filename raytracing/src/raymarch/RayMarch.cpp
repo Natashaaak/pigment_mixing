@@ -20,7 +20,15 @@ RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     generateBRDFLUT();
     initSkybox();
 
-    HDRLoader::loadHDRCubemap("data/SkyMap.hdr", hdrTexture, irradianceTexture);
+    // Default lights if not in config
+    lightDirs.push_back(glm::normalize(glm::vec3(0.9096f, 0.4466f, 0.3660f)));
+    lightColors.push_back(glm::vec3(1.0f));
+    lightIntensities.push_back(2.0f);
+
+    lightDirs.push_back(glm::normalize(glm::vec3(-0.2853f, 0.4466f, 0.9380f)));
+    lightColors.push_back(glm::vec3(1.0f));
+    lightIntensities.push_back(0.5f);
+
 
     spatulaMesh = new SpatulaMesh("data/spatula_handler.obj"); // Nebo "../data/spatula_handler.obj" v závislosti na pracovním adresáři
 }
@@ -92,6 +100,39 @@ void RayMarch::loadConfig(const std::string& path) {
                     floorMat.roughness = mats["floor"]["roughness"].get<float>();
                 }
             }
+            if (j.contains("lights")) {
+                lightDirs.clear();
+                lightColors.clear();
+                lightIntensities.clear();
+                auto& lights_data = j["lights"];
+                for (const auto& light : lights_data) {
+                    if (lightDirs.size() >= MAX_LIGHTS) {
+                        spdlog::warn("Maximum number of lights ({}) reached. Ignoring additional lights.", (int)MAX_LIGHTS);
+                        break;
+                    }
+                    if (light.contains("direction") && light.contains("color") && light.contains("intensity")) {
+                        auto dir_vec = light["direction"].get<std::vector<float>>();
+                        lightDirs.push_back(glm::normalize(glm::vec3(dir_vec[0], dir_vec[1], dir_vec[2])));
+
+                        auto col_vec = light["color"].get<std::vector<float>>();
+                        lightColors.push_back(glm::vec3(col_vec[0], col_vec[1], col_vec[2]));
+
+                        lightIntensities.push_back(light["intensity"].get<float>());
+                    }
+                }
+            }
+            
+            std::string skyMapPath = "data/SkyMap.hdr";
+            if (j.contains("environment")) {
+                auto& env = j["environment"];
+                if (env.contains("skymap")) {
+                    skyMapPath = env["skymap"].get<std::string>();
+                }
+            }
+            if (hdrTexture) glDeleteTextures(1, &hdrTexture);
+            if (irradianceTexture) glDeleteTextures(1, &irradianceTexture);
+            HDRLoader::loadHDRCubemap(skyMapPath, hdrTexture, irradianceTexture);
+            
         } catch (const std::exception& e) {
             spdlog::error("Error parsing config {}: {}", config_path, e.what());
         }
@@ -363,7 +404,9 @@ void RayMarch::renderTex(Camera* camera) {
 void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera) {
     resizeTexutres(ww, wh);
     // if (state.play) {
+#ifdef MEASURE_TIME
     ctimer.start(1);
+#endif
     a->fixedAABB(mpm);
     bdg->createVectors(a, mpm);
     bdg->fillBDG(a, mpm);
@@ -456,17 +499,20 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("invSpatulaTransform", mpm->getSpatulaInvTransform());
     shader->setUniform("has_spatula", mpm->spatulaExists());
     shader->setUniform("spatulaDim", mpm->getSpatulaDim());
+    
+    std::vector<glm::vec3> finalLightColors;
+    finalLightColors.reserve(lightDirs.size());
+    for (size_t i = 0; i < lightDirs.size(); ++i) {
+        finalLightColors.push_back(lightColors[i] * lightIntensities[i]);
+    }
 
-    // Vynásobíme barvu intenzitou pro finální hodnotu světla
-    glm::vec3 finalLightColors[2] = { lightColors[0] * lightIntensities[0], lightColors[1] * lightIntensities[1] };
+    shader->setUniform("numLights", (int)lightDirs.size());
+    shader->setUniform("lightDirs", lightDirs);
+    shader->setUniform("lightColors", finalLightColors);
 
-    // Směrová světla pro PBR (D, F, G) a stíny
-    shader->setUniform("lightDirs[0]", lightDirs[0]);
-    shader->setUniform("lightDirs[1]", lightDirs[1]);
-    shader->setUniform("lightColors[0]", finalLightColors[0]);
-    shader->setUniform("lightColors[1]", finalLightColors[1]);
-
+#ifdef MEASURE_TIME
     ctimer.end(1);
+#endif
     GLuint groupCountX = (ww + state.groupSizeRayMarching.x - 1) / state.groupSizeRayMarching.x;
     GLuint groupCountY = (wh + state.groupSizeRayMarching.y - 1) / state.groupSizeRayMarching.y;
     // glBeginQuery(GL_TIME_ELAPSED, timer.queries[1]);
@@ -515,11 +561,10 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
         spatulaShader->setUniform("projection", camera->getProj());
         spatulaShader->setUniform("camPos", camera->cameraPos);
         spatulaShader->setUniform("fullRender", state.fullRender);
-        spatulaShader->setUniform("lightDirs[0]", lightDirs[0]);
-        spatulaShader->setUniform("lightDirs[1]", lightDirs[1]);
-        spatulaShader->setUniform("lightColors[0]", finalLightColors[0]);
-        spatulaShader->setUniform("lightColors[1]", finalLightColors[1]);
 
+        spatulaShader->setUniform("numLights", (int)lightDirs.size());
+        spatulaShader->setUniform("lightDirs", lightDirs);
+        spatulaShader->setUniform("lightColors", finalLightColors);
         // Navážeme PBR textury, které jsou potřeba pro IBL (Image-Based Lighting).
         // Bez nich by `texture(irradianceMap, ...)` vracelo černou barvu, což způsobuje černé odlesky.
         if (hdrTexture) { glActiveTexture(GL_TEXTURE5); glBindTexture(GL_TEXTURE_CUBE_MAP, hdrTexture); spatulaShader->setUniform("hdrMap", 5); }

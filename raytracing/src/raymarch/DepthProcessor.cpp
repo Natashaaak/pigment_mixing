@@ -241,9 +241,13 @@ void DepthProcessor::computeNScreen(GLint ww, GLint wh, Camera *camera) {
 void DepthProcessor::generateDepthMaps(MPMIntegrationSim *mpm, GLint ww, GLint wh, Camera *camera) {
     idsDagg.clear();
     idsDall.clear();
+#ifdef MEASURE_TIME
     ctimer.start(2);
+#endif
     c->countDensities(mpm, idsDagg, idsDall);
+#ifdef MEASURE_TIME
     ctimer.end(2);
+#endif
     buffers(mpm);
     resizeTextures(ww, wh);
     glEnable(GL_DEPTH_TEST);

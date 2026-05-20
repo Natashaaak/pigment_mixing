@@ -8,6 +8,11 @@ struct Material {
     float roughness;
 };
 
+#define MAX_LIGHTS 4
+uniform int numLights;
+uniform vec3 lightDirs[MAX_LIGHTS];
+uniform vec3 lightColors[MAX_LIGHTS];
+
 // Required textures for PBR
 layout(binding = 6) uniform samplerCube irradianceMap;
 layout(binding = 5) uniform samplerCube hdrMap; // Used for pre-filtered specular reflections
@@ -50,13 +55,13 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
-vec3 computePBRLighting(Material mat, Material floorMat, vec3 worldPos, vec3 N, vec3 V, vec3 lightDirs[2], vec3 lightColors[2], float shadows[2]) {
+vec3 computePBRLighting(Material mat, Material floorMat, vec3 worldPos, vec3 N, vec3 V, float shadows[MAX_LIGHTS]) {
     vec3 F0 = vec3(0.04); 
     F0 = mix(F0, mat.albedo, mat.metallic);
     float NdotV = max(dot(N, V), 0.0);
     vec3 Lo = vec3(0.0);
 
-    for(int i = 0; i < 2; i++) {
+    for(int i = 0; i < numLights; i++) {
         vec3 L = normalize(lightDirs[i]);
         // Light from below the horizon is blocked by the infinite floor
         if (L.y < 0.0) continue;
@@ -105,7 +110,7 @@ vec3 computePBRLighting(Material mat, Material floorMat, vec3 worldPos, vec3 N, 
         // NOTE: We are intentionally omitting shadows here for performance. A full shadow
         // calculation for every reflection would be too slow.
         vec3 directLighting = vec3(0.0);
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < numLights; i++) {
             vec3 L = normalize(lightDirs[i]);
             if (L.y > 0.0) { // Only consider lights from above the floor
                 float NdotL = max(dot(floorNormal, L), 0.0);

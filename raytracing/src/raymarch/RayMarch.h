@@ -77,10 +77,11 @@ private:
     MaterialConfig spatulaMetal = {glm::vec3(1.0f), 0.8f, 0.1f};
     MaterialConfig spatulaWood = {glm::vec3(0.59f, 0.29f, 0.0f), 0.0f, 0.8f};
     MaterialConfig floorMat = {glm::vec3(0.85f), 0.0f, 0.6f};
-    // -0.963066f, 0.135988f, 0.135988f
-    glm::vec3 lightDirs[2] = {glm::normalize(glm::vec3(0.9096f, 0.4466f, 0.3660f)), glm::normalize(glm::vec3(-0.2853f, 0.4466f, 0.9380f))};
-    glm::vec3 lightColors[2] = {glm::vec3(1.0f), glm::vec3(1.0f)}; // Čistá barva (např. bílá)
-    float lightIntensities[2] = {2.0f, 0.5f};                     // Násobič intenzity
+
+    static constexpr int MAX_LIGHTS = 4;
+    std::vector<glm::vec3> lightDirs;
+    std::vector<glm::vec3> lightColors;
+    std::vector<float> lightIntensities;
 };
 
 

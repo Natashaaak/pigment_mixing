@@ -18,6 +18,7 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "mpm/MPMIntegrationSim.h"
 #include "../../deps/json.hpp"
+#include "mixbox/mixbox.h"
 #include <string>
 #include <algorithm>
 #include <vector>
@@ -36,20 +37,80 @@ RayMarch *rm;
 Camera *camera;
 MPMIntegrationSim *mpm = nullptr;
 AABBc *a;
-char outputDir[256] = "output_images";
-bool takeScreenshot = false;
-bool screenshotsTaken = false;
 
 extern std::string g_spatula_anim_path;
 int g_num_colors = 2;
-float g_colors[4][3] = {
-    {0.959123f, 0.802565f, 0.0356184f}, // Yellow
-    {0.0771705f, 0.0282698f, 0.24833f}, // Blue
-    {0.995181f, 0.999781f, 0.997048f}, // White
-    {0.506f, 0.012f, 0.184f}  // Magenta
+
+struct Pigment {
+    std::string name;
+    float rgb[3];
 };
 
-float g_ratios[4] = { 0.5f, 0.5f, 0.0f, 0.0f };
+std::vector<Pigment> g_available_pigments;
+std::vector<const char*> g_pigment_names;
+int g_selected_pigment_indices[4] = {0, 1, 2, 3}; // Default indices for up to 4 colors
+
+// This array will be populated from the selected pigments
+float g_colors[4][3] = {{0}};
+
+float g_ratios[4] = { 0.1f, 0.1f, 0.1f, 0.1f };
+
+void loadPigmentConfig(const std::string& path) {
+    std::string config_path = path;
+    std::ifstream file(config_path);
+    if (!file.is_open() && config_path == "../colors_config.json") {
+        config_path = "colors_config.json"; // Fallback
+        file.open(config_path);
+    }
+
+    if (!file.is_open()) {
+        spdlog::error("Could not open pigment config file: {}. Using fallback colors.", config_path);
+        g_available_pigments = {
+            {"Yellow", {0.959f, 0.802f, 0.035f}},
+            {"Blue", {0.077f, 0.028f, 0.248f}},
+            {"White", {0.995f, 0.999f, 0.997f}},
+            {"Magenta", {0.506f, 0.012f, 0.184f}}
+        };
+    } else {
+        try {
+            nlohmann::json j;
+            file >> j;
+            if (j.contains("pigments")) {
+                for (const auto& p : j["pigments"]) {
+                    Pigment pigment;
+                    pigment.name = p["name"].get<std::string>();
+                    auto rgb = p["rgb"].get<std::vector<float>>();
+                    if (rgb.size() == 3) {
+                        pigment.rgb[0] = rgb[0];
+                        pigment.rgb[1] = rgb[1];
+                        pigment.rgb[2] = rgb[2];
+                        g_available_pigments.push_back(pigment);
+                    }
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::error("Error parsing pigment config {}: {}", config_path, e.what());
+        }
+    }
+
+    // Prepare names for ImGui and update initial g_colors
+    g_pigment_names.clear();
+    for (const auto& pigment : g_available_pigments) {
+        g_pigment_names.push_back(pigment.name.c_str());
+    }
+
+    // Set initial colors based on default indices
+    for (int i = 0; i < 4; ++i) {
+        if (i < g_available_pigments.size()) {
+            // Ensure default indices are valid
+            g_selected_pigment_indices[i] = std::min(g_selected_pigment_indices[i], (int)g_available_pigments.size() - 1);
+            const auto& pigment = g_available_pigments[g_selected_pigment_indices[i]];
+            g_colors[i][0] = pigment.rgb[0];
+            g_colors[i][1] = pigment.rgb[1];
+            g_colors[i][2] = pigment.rgb[2];
+        }
+    }
+}
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -83,7 +144,7 @@ void saveImage(const std::string& directory, GLFWwindow* win) {
         }
         std::string filepath = directory.empty() ? filename : directory + "/" + filename;
         if (stbi_write_png(filepath.c_str(), width, height, 3, flippedPixels.data(), width * 3)) {
-            screenshotsTaken = true;
+            state.screenshotsTaken = true;
         } else {
             debug("Failed to open file for image saving: ", filepath);
         }
@@ -104,8 +165,8 @@ void processInput(GLFWwindow *window, int key, int scancode, int action, int mod
         camera->setPos(camera->cameraPos + (camera->camForward * 0.5f));
     }
     if (key == GLFW_KEY_P && action == GLFW_PRESS) {
-        takeScreenshot = !takeScreenshot;
-        debug("Take screenshot: ", takeScreenshot);
+        state.takeScreenshot = !state.takeScreenshot;
+        debug("Take screenshot: ", state.takeScreenshot);
     }
     if (key == GLFW_KEY_F && action == GLFW_PRESS) {
         state.fullRender = !state.fullRender;
@@ -190,21 +251,27 @@ int createWindow() {
     return OK;
 }
 
+#ifdef MEASURE_TIME
 static double frame_sim_time_ms = 0.0;
+#endif
 
 /**
  * Performs one simulation step if simulation is unpaused
  */
 void sim() {
     if (state.play) {
+#ifdef MEASURE_TIME
         auto start = std::chrono::high_resolution_clock::now();
         ctimer.start(0);
+#endif
         mpm->simStep();
+#ifdef MEASURE_TIME
         ctimer.end(0);
         auto end = std::chrono::high_resolution_clock::now();
         frame_sim_time_ms += std::chrono::duration<double, std::milli>(end - start).count();
         // ctimer.start(3);
         // ctimer.end(3);
+#endif
     }
 }
 
@@ -222,32 +289,46 @@ void clearWindow() {
 void renderSpheres(bool firstRender = false) {
     if(!firstRender && !mpm->isTimeToRender() && state.play) return;
 
+#ifdef MEASURE_TIME
     timer.update();
 
     if (state.play && !firstRender) {
         float gpu_prep_time = ctimer.rbh[1].last() + ctimer.rbh[3].last();
         float render_time = timer.rbh[0].last();
-        std::cout << "Snímek " << mpm->getFrame() << " nasimulován za: " << frame_sim_time_ms << " ms"
+        std::cout << "Frame " << mpm->getFrame() << " simulated in : " << frame_sim_time_ms << " ms"
                   << ", Data prep: " << gpu_prep_time << " ms"
                   << ", Render: " << render_time << " ms" << std::endl;
         frame_sim_time_ms = 0.0;
     }
+#else
+    if (state.play && !firstRender){
+        std::cout << "Frame " << mpm->getFrame() << " done." << std::endl;
+    }
+#endif
 
     clearWindow();
+#ifdef MEASURE_TIME
     ctimer.start(3);
+#endif
     mpm->recountParticles();
+#ifdef MEASURE_TIME
     ctimer.end(3);
+#endif
 
     int ww, wh;
     glfwGetFramebufferSize(window, &ww, &wh);
     auto& spheresData = mpm->getParticles();
 
+#ifdef MEASURE_TIME
     timer.start(0);
+#endif
     rm->march(ww, wh, mpm, camera);
+#ifdef MEASURE_TIME
     timer.end(0);
+#endif
 
-    if (takeScreenshot && state.play) {
-        saveImage(outputDir, window);
+    if (state.takeScreenshot && state.play) {
+        saveImage(state.outputDir, window);
     }
 }
 
@@ -256,7 +337,7 @@ void renderSpheres(bool firstRender = false) {
  */
 void physicsInit() {
     mpm = new MPMIntegrationSim();
-    mpm->setupScene();
+    mpm->setupScene(state.FPS);
 }
 
 /**
@@ -277,72 +358,108 @@ void guiStart(bool &start) {
     float bw = vp->WorkSize.x * 0.5f;
     float bh = 80.0f;
 
-    float totalH = (bh * 2) + 160.0f + (g_num_colors * 40.0f);
+    float totalH = (bh * 2) + 160.0f + (g_num_colors * 40.0f) + 80.0f; // Increased for preview
 
     ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - bw) * 0.5f, (vp->WorkSize.y - totalH) * 0.5f));
 
     ImGui::BeginGroup();
 
-    static int spatula_anim_idx = 0;
-    ImGui::PushItemWidth(bw);
-    ImGui::Text("Spatula Animation:");
-    ImGui::Combo("##SpatulaAnim", &spatula_anim_idx, "Mixing Blobs\0Squish\0Sweep\0Mixing\0Inf\0\0");
-    ImGui::PopItemWidth();
-    ImGui::Dummy(ImVec2(0, 10));
-
-    ImGui::Separator();
-    ImGui::Dummy(ImVec2(0, 10));
-
     static int prev_num_colors = g_num_colors;
     ImGui::PushItemWidth(bw);
     
-    // Re-balance evenly if the user changes the number of active colors
-    if (ImGui::SliderInt("Number of Colors", &g_num_colors, 2, 4)) {
+    // When the number of colors changes, each gets a basic minimum of 10%
+    if (ImGui::SliderInt("Number of colors", &g_num_colors, 2, 4)) {
         if (g_num_colors != prev_num_colors) {
-            float val = 1.0f / g_num_colors;
-            for (int i = 0; i < g_num_colors; ++i) g_ratios[i] = val;
+            for (int i = 0; i < g_num_colors; ++i) g_ratios[i] = 0.1f;
+            for (int i = g_num_colors; i < 4; ++i) g_ratios[i] = 0.0f;
             prev_num_colors = g_num_colors;
         }
     }
     
+    // Calculate unallocated free volume
+    float current_sum = 0.0f;
+    for (int i = 0; i < g_num_colors; ++i) current_sum += g_ratios[i];
+    float unallocated = std::max(0.0f, 1.0f - current_sum);
+
+    ImVec4 unallocatedColor = (unallocated > 0.005f) ? ImVec4(0.9f, 0.7f, 0.0f, 1.0f) : ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+    ImGui::TextColored(unallocatedColor, "Remaining volume: %.0f %%", unallocated * 100.0f);
+    ImGui::Dummy(ImVec2(0, 5));
+
+    // Fixed maximum value for the visual range of the sliders (prevents them from jumping)
+    float fixed_max = 1.0f - 0.1f * (g_num_colors - 1);
+
     for (int i = 0; i < g_num_colors; ++i) {
         ImGui::PushID(i);
-        ImGui::ColorEdit3("##Color", g_colors[i], ImGuiColorEditFlags_NoInputs);
-        ImGui::SameLine();
         
-        float max_ratio = 1.0f - 0.1f * (g_num_colors - 1);
-        if (ImGui::SliderFloat("Ratio", &g_ratios[i], 0.1f, max_ratio, "Vol Ratio: %.2f")) {
+        // Preview
+        ImGui::ColorButton("##ColorPreview", ImVec4(g_colors[i][0], g_colors[i][1], g_colors[i][2], 1.0f));
+        ImGui::SameLine();
+
+        // Dropdown
+        ImGui::PushItemWidth(150);
+        if (ImGui::Combo("##Color", &g_selected_pigment_indices[i], g_pigment_names.data(), g_pigment_names.size())) {
+            // When a new pigment is selected, just update the color for the current slot.
+            // The logic to prevent duplicates has been removed.
+            const auto& selected_pigment = g_available_pigments[g_selected_pigment_indices[i]];
+            g_colors[i][0] = selected_pigment.rgb[0];
+            g_colors[i][1] = selected_pigment.rgb[1];
+            g_colors[i][2] = selected_pigment.rgb[2];
+        }
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+
+        if (ImGui::SliderFloat("Ratio", &g_ratios[i], 0.1f, fixed_max, "%.2f")) {
             g_ratios[i] = roundf(g_ratios[i] * 100.0f) / 100.0f;
-            g_ratios[i] = std::max(0.1f, std::min(g_ratios[i], max_ratio)); // Ensure strict bounds on manual input after rounding
-
-            float rest_sum = 0.0f;
-            for (int j = 0; j < g_num_colors; ++j) if (i != j) rest_sum += g_ratios[j];
             
-            float target_rest_sum = 1.0f - g_ratios[i];
-            float free_rest_sum = rest_sum - 0.1f * (g_num_colors - 1);
-            float target_free_sum = target_rest_sum - 0.1f * (g_num_colors - 1);
-
-            if (free_rest_sum > 0.0001f) { // Scale the free portions proportionally
-                float scale = target_free_sum / free_rest_sum;
-                for (int j = 0; j < g_num_colors; ++j) if (i != j) g_ratios[j] = 0.1f + (g_ratios[j] - 0.1f) * scale;
-            } else { // If the others were fully depleted, distribute the new free remainder evenly
-                float val = target_free_sum / (g_num_colors - 1);
-                for (int j = 0; j < g_num_colors; ++j) if (i != j) g_ratios[j] = 0.1f + val;
+            // Calculate the actual physical limit for the given slider based on the other colors
+            float sum_others = 0.0f;
+            for (int j = 0; j < g_num_colors; ++j) {
+                if (i != j) sum_others += g_ratios[j];
             }
+            float true_max_allowed = std::max(0.1f, 1.0f - sum_others);
+            
+            // Do not allow the user to drag the value higher than physically possible
+            g_ratios[i] = std::max(0.1f, std::min(g_ratios[i], true_max_allowed));
         }
         ImGui::PopID();
     }
     ImGui::PopItemWidth();
     ImGui::Dummy(ImVec2(0, 20));
 
-    if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
-        if (spatula_anim_idx == 0) g_spatula_anim_path = "../matter/animations/spatula_motion.bin";
-        else if (spatula_anim_idx == 1) g_spatula_anim_path = "../matter/animations/spatula_motion_squish.bin";
-        else if (spatula_anim_idx == 2) g_spatula_anim_path = "../matter/animations/spatula_motion_sweep.bin";
-        else if (spatula_anim_idx == 3) g_spatula_anim_path = "../matter/animations/spatula_motion_mixing.bin";
-        else if (spatula_anim_idx == 4) g_spatula_anim_path = "../matter/animations/spatula_motion_inf.bin";
+    // Preview of the mixed color
+    ImGui::Text("Expected mixed result:");
+    float mixed_latent[MIXBOX_NUMLATENTS] = {0.0f};
+    float total_ratio = 0.0f;
+    for (int i = 0; i < g_num_colors; ++i) {
+        total_ratio += g_ratios[i];
+    }
+    float preview_r = 0.0f, preview_g = 0.0f, preview_b = 0.0f;
+    if (total_ratio > 0.001f) {
+        for (int i = 0; i < g_num_colors; ++i) {
+            float latent[MIXBOX_NUMLATENTS];
+            mixbox_srgb32f_to_latent(g_colors[i][0], g_colors[i][1], g_colors[i][2], latent);
+            float weight = g_ratios[i] / total_ratio;
+            for (int j = 0; j < MIXBOX_NUMLATENTS; ++j) {
+                mixed_latent[j] += latent[j] * weight;
+            }
+        }
+        mixbox_latent_to_srgb32f(mixed_latent, &preview_r, &preview_g, &preview_b);
+    }
+    ImGui::ColorButton("##MixedPreview", ImVec4(preview_r, preview_g, preview_b, 1.0f), ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoInputs, ImVec2(bw, 40.0f));
+    ImGui::Dummy(ImVec2(0, 20));
 
+    bool can_start = (unallocated < 0.005f); // Allows for minor float deviation
+    if (!can_start) {
+        ImGui::TextColored(ImVec4(0.8f, 0.2f, 0.2f, 1.0f), "Remaining volume must be split before starting.");
+        ImGui::BeginDisabled(true);
+    }
+
+    if (ImGui::Button("Start simulation", ImVec2(bw, bh))) {
         start = true;
+    }
+
+    if (!can_start) {
+        ImGui::EndDisabled();
     }
     ImGui::Dummy(ImVec2(0, 60));
 
@@ -505,9 +622,11 @@ void gui() {
     ImGui::SameLine();
 
     ImGui::BeginChild("---Statistics---", ImVec2(0,0), true);
+#ifdef MEASURE_TIME
     timer.plotLine();
     ctimer.plotLine();
     ImGui::Separator();
+#endif
 
 
     ImGui::SetNextWindowSize(io.DisplaySize);
@@ -519,9 +638,9 @@ void gui() {
     ImGui::Text("FPS: %.1f (%.3f ms/frame)", io.Framerate, 1000.0f/io.Framerate);
 
     ImGui::Separator();
-    ImGui::InputText("Output Dir", outputDir, IM_ARRAYSIZE(outputDir));
+    ImGui::InputText("Output Dir", state.outputDir, IM_ARRAYSIZE(state.outputDir));
     if (ImGui::Button("Save Rendered Image")) {
-        takeScreenshot = true;
+        state.takeScreenshot = true;
     }
 
     ImGui::EndChild();
@@ -529,17 +648,23 @@ void gui() {
     ImGui::End();
 
     ImGui::Render();
+#ifdef MEASURE_TIME
     timer.start(1);
+#endif
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+#ifdef MEASURE_TIME
     timer.end(1);
+#endif
 }
 
 int mainComputeLoop() {
     int fbW, fbH;
     glfwGetFramebufferSize(glfwGetCurrentContext(), &fbW, &fbH);
     glViewport(0, 0, fbW, fbH);
+#ifdef MEASURE_TIME
     timer.init();
     ctimer.init();
+#endif
     bool startScene = false;
     while(!glfwWindowShouldClose(window)) {
         if (!startScene) {
@@ -571,7 +696,9 @@ int mainComputeLoop() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+#ifdef MEASURE_TIME
     timer.clear();
+#endif
 
     // Calculate and print the final mixed color
     if (mpm) {
@@ -584,19 +711,19 @@ int mainComputeLoop() {
     delete a;
     glfwTerminate();
 
-    if (takeScreenshot || screenshotsTaken) {
+    if (state.takeScreenshot || state.screenshotsTaken) {
         auto now = std::chrono::system_clock::now();
         auto in_time_t = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
         ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S");
         std::string timestamp = ss.str();
-        // Příkaz pro vytvoření MP4 videa s kodekem H.264, který je široce kompatibilní.
-        // -pix_fmt yuv420p je důležitý pro kompatibilitu s většinou přehrávačů.
-        std::string cmd = "ffmpeg -y -loglevel quiet -framerate 30 -i " + std::string(outputDir) + "/render_%05d.png -vf \"pad=ceil(iw/2)*2:ceil(ih/2)*2\" -c:v libx264 -pix_fmt yuv420p " + std::string(outputDir) + "/animation_" + timestamp + ".mp4";
+        // Command to create an MP4 video with the H.264 codec, which is widely compatible.
+        // -pix_fmt yuv420p is important for compatibility with most players.
+        std::string cmd = "ffmpeg -y -loglevel quiet -framerate " + std::to_string(state.FPS) + " -i " + std::string(state.outputDir) + "/render_%05d.png -vf \"pad=ceil(iw/2)*2:ceil(ih/2)*2\" -c:v libx264 -pix_fmt yuv420p " + std::string(state.outputDir) + "/animation_" + timestamp + ".mp4";
         int ret = system(cmd.c_str());
         if (ret == 0) {
             int frame_count = 0;
-            for (const auto& entry : std::filesystem::directory_iterator(outputDir)) {
+            for (const auto& entry : std::filesystem::directory_iterator(state.outputDir)) {
                 if (entry.path().extension() == ".png") {
                     frame_count++;
                     std::filesystem::remove(entry.path());
@@ -622,6 +749,9 @@ int main() {
     spdlog::set_default_logger(l);
     l->set_level(spdlog::level::trace);
     spdlog::flush_every(std::chrono::seconds(3));
+
+    loadPigmentConfig("../colors_config.json");
+
     if (createWindow() != OK) return -1;
 
     glm::vec3 camera_pos(0.0f, 1.5f, -2.0f);
@@ -647,6 +777,15 @@ int main() {
                 if (camera_data.contains("target")) {
                     auto& tgt = camera_data.at("target");
                     camera_tgt = glm::vec3(tgt[0].get<float>(), tgt[1].get<float>(), tgt[2].get<float>());
+                }
+            }
+            if (data.contains("simulation")) {
+                auto& sim = data.at("simulation");
+                if (sim.contains("fps")) {
+                    state.FPS = sim.at("fps").get<int>();
+                }
+                if (sim.contains("animation")) {
+                    g_spatula_anim_path = sim.at("animation").get<std::string>();
                 }
             }
             spdlog::info("Loaded camera settings from {}: pos({}, {}, {})", config_path, camera_pos.x, camera_pos.y, camera_pos.z);

@@ -13,7 +13,7 @@ MPMIntegrationSim::~MPMIntegrationSim(){
     delete sim;
 }
 
-void MPMIntegrationSim::setupScene(){
+void MPMIntegrationSim::setupScene(int fps){
     ratios.clear();
     std::vector<Eigen::Matrix<float, 7, 1>> initial_pigments;
     
@@ -33,7 +33,6 @@ void MPMIntegrationSim::setupScene(){
         std::cout << ")" << std::endl;
     }
 
-    float fps = 30;
     sim->initializeBasic("mpm_integration_test");
     sim->setupScene(fps, ratios, initial_pigments);
     sim->prepareSimulation();

@@ -170,9 +170,6 @@ const vec3 floorCol = vec3(0.375f, 0.375f, 0.375f);
 ivec3 cS4 = ivec3(3);
 ivec3 cS2 = ivec3(1);
 
-uniform vec3 lightDirs[2];
-uniform vec3 lightColors[2];
-
 #include "pbr_lighting.glsl"
 
 uniform Material fluidMat;
@@ -1031,19 +1028,19 @@ void main(){
                 vec3 N = computeNormal(ray_mpm.start, pos, pix, depth);
                 vec3 N_world = normalize(mat3(invView) * N);
                 vec3 V_world = -ray_mpm.dir;
-                
-                float shadows[2] = {1.0, 1.0};
+
+                float shadows[MAX_LIGHTS];
                 if (fullRender) {
-                    for(int s = 0; s < 2; s++) {
+                    for(int s = 0; s < numLights; s++) {
                         shadows[s] = calcShadow(pos, normalize(lightDirs[s]), false);
                     }
                 }
-                
+
                 vec3 final_color;
                 if (fullRender) {
                     Material fluidMat_colored = fluidMat;
                     fluidMat_colored.albedo = surfaceColor; // Použijeme barvu přímo jako albedo bez umělého zesílení
-                    final_color = computePBRLighting(fluidMat_colored, floorMat, pos, N_world, V_world, lightDirs, lightColors, shadows);
+                    final_color = computePBRLighting(fluidMat_colored, floorMat, pos, N_world, V_world, shadows);
                 } else {
                     vec3 irradiance = texture(irradianceMap, N_world).rgb;
                     final_color = surfaceColor * irradiance;
@@ -1063,17 +1060,17 @@ void main(){
         vec3 N = getSpatulaNormal(pos_spatula);
         vec3 N_world = normalize(mat3(invView) * N);
         vec3 V_world = -ray_vdb.dir;
-        
-        float shadows[2] = {1.0, 1.0};
+
+        float shadows[MAX_LIGHTS];
         if (fullRender) {
-            for(int s = 0; s < 2; s++) {
+            for(int s = 0; s < numLights; s++) {
                 shadows[s] = calcShadow(pos_spatula, normalize(lightDirs[s]), false);
             }
         }
 
         vec3 final_spatula_color;
         if (fullRender) {
-            final_spatula_color = computePBRLighting(spatulaMat, floorMat, pos_spatula, N_world, V_world, lightDirs, lightColors, shadows);
+            final_spatula_color = computePBRLighting(spatulaMat, floorMat, pos_spatula, N_world, V_world, shadows);
         } else {
             vec3 irradiance = texture(irradianceMap, N_world).rgb;
             final_spatula_color = spatula_color * irradiance;
@@ -1089,15 +1086,15 @@ void main(){
         vec3 V_world = -ray_vdb.dir;
         
         // Checkerboard pattern
-        vec2 checker = floor(hit_pos.xz * 2.0);
+        vec2 checker = floor(hit_pos.xz * 4.0);
         float c = mod(checker.x + checker.y, 2.0);
         vec3 floor_color = floorCol.rgb * (0.8 + c * 0.2);
         
-        float shadows[2] = {1.0, 1.0};
+        float shadows[MAX_LIGHTS];
         float contactOcc = 1.0;
         if (fullRender) {
             contactOcc = computeContactShadow(hit_pos);
-            for(int s = 0; s < 2; s++) {
+            for(int s = 0; s < numLights; s++) {
                 float rnd = rand(hit_pos.xz * 100.0 + vec2(s * 13.0, s * 17.0));
                 vec3 jitterDir = normalize(lightDirs[s] + (rnd - 0.5) * 0.2);                
                 // Stín z oken (kontaktní stín se aplikuje až na konci)
@@ -1107,7 +1104,7 @@ void main(){
 
         vec3 final_floor_color;
         if (fullRender) {
-            final_floor_color = computePBRLighting(floorMat, floorMat, hit_pos, N_floor, V_world, lightDirs, lightColors, shadows);
+            final_floor_color = computePBRLighting(floorMat, floorMat, hit_pos, N_floor, V_world, shadows);
             // Aplikace kontaktního stínu (Ambient Occlusion) na finální barvu.
             // Tím se ztmaví jak přímé, tak nepřímé (ambientní) osvětlení.
             final_floor_color *= contactOcc;
@@ -1117,7 +1114,12 @@ void main(){
         }
         
         float floorViewZ = (view * vec4(hit_pos, 1.0)).z;
-        float outAlpha = fullRender ? (shadows[0] + shadows[1]) * 0.5 : 1.0f;
+        float outAlpha = 1.0f;
+        if (fullRender && numLights > 0) {
+            float shadowSum = 0.0;
+            for(int s=0; s<numLights; ++s) shadowSum += shadows[s];
+            outAlpha = shadowSum / numLights;
+        }
         imageStore(outTex, pix, vec4(final_floor_color, outAlpha)); // Hodnota stínu do Alpha kanálu
         imageStore(normalDepthTex, pix, vec4(N_floor_view, floorViewZ));
     } else { // Background
