@@ -118,5 +118,5 @@ void SpatulaMesh::loadOBJ(const std::string& path) {
 
     glBindVertexArray(0);
 
-    spdlog::info("Loaded OBJ: {} with {} vertices.", path, vertex_count);
+    std::cout << "Loaded OBJ: " << path << " with " << vertex_count << " vertices." << std::endl;
 }

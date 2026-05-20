@@ -121,11 +121,15 @@ public:
   T pigment_D_max = 10e-2;
   T pigment_D_edge0 = 0.5;
   T pigment_D_edge1 = 0.8;
+  T start_boost_time = 20.0;
+  T end_boost_time = 40.0;
+  T boost_factor = 2.0;
 
   // Objects
   std::vector<std::unique_ptr<ObjectPlate>> plates;
   std::vector<std::unique_ptr<ObjectGeneral>> objects;
   ObjectSpatula* spatula_ptr = nullptr;
+  std::string spatula_anim_path;
 
   // Functions
   void initialize(bool save = true, std::string dir = "output/", std::string name = "dummy");
@@ -167,7 +171,7 @@ public:
 
   // New function for raytracing integration
   void initializeBasic(std::string name);
-  void setupScene(const float fps, const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments);
+  void setupScene(const float fps, const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments, const std::string& spatula_anim_path);
   void sampleMultipleVdbObjects(std::vector<std::string> vdb_filenames, std::vector<uint8_t> colors, T kRadius, T ppc);
   void blobs(const std::vector<float> &colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>> &pigments);
   void prepareSimulation();

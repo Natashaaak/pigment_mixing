@@ -246,7 +246,7 @@ public:
         std::vector<FrameData> buffer(size / sizeof(FrameData));
         if (file.read(reinterpret_cast<char*>(buffer.data()), size)) {
             animation_data = buffer;
-            debug("Loaded animation with ", animation_data.size(), " frames");
+            debug("Loaded animation ", path.c_str()," with ", animation_data.size(), " frames");
         }
     }
 

@@ -16,6 +16,15 @@
 // #define MEASURE_TIME 
 ///////////////////////////////////////////////////
 
+#include <string>
+#include <chrono>
+#include <vector>
+
+struct Pigment {
+    std::string name;
+    float rgb[3];
+};
+
 #pragma once
 struct State {
     float iso = 9285.0f;
@@ -63,10 +72,19 @@ struct State {
     int fontChoice = 3;
     glm::vec2 params = {0.75, 0.74}; //a and b params for BDG filling from the paper
 
+    int g_num_colors = 2;
     char outputDir[256] = "output_images";
     bool takeScreenshot = false;
     bool screenshotsTaken = false;
     int FPS = 30;
+    int stabilizeFrames = 10;
+    std::string g_spatula_anim_path; 
+    std::vector<Pigment> g_available_pigments;
+    std::chrono::high_resolution_clock::time_point simulationStartTime;
+    std::vector<const char*> g_pigment_names;
+    int g_selected_pigment_indices[4] = {0, 1, 2, 3}; // Default indices for up to 4 colors
+    float g_colors[4][3] = {{0}};
+    float g_ratios[4] = { 0.1f, 0.1f, 0.1f, 0.1f };
 };
 
 extern State state;

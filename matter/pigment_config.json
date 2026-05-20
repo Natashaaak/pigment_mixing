@@ -1,5 +1,8 @@
 {
     "D_max": 50.0,
     "D_edge0": 1.5,
-    "D_edge1": 7.0
+    "D_edge1": 7.0,
+    "start_boost_time": 20,
+    "end_boost_time": 40,
+    "boost_factor": 2.0
 }

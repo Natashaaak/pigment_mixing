@@ -38,23 +38,6 @@ Camera *camera;
 MPMIntegrationSim *mpm = nullptr;
 AABBc *a;
 
-extern std::string g_spatula_anim_path;
-int g_num_colors = 2;
-
-struct Pigment {
-    std::string name;
-    float rgb[3];
-};
-
-std::vector<Pigment> g_available_pigments;
-std::vector<const char*> g_pigment_names;
-int g_selected_pigment_indices[4] = {0, 1, 2, 3}; // Default indices for up to 4 colors
-
-// This array will be populated from the selected pigments
-float g_colors[4][3] = {{0}};
-
-float g_ratios[4] = { 0.1f, 0.1f, 0.1f, 0.1f };
-
 void loadPigmentConfig(const std::string& path) {
     std::string config_path = path;
     std::ifstream file(config_path);
@@ -63,9 +46,10 @@ void loadPigmentConfig(const std::string& path) {
         file.open(config_path);
     }
 
+    state.g_available_pigments.clear();
     if (!file.is_open()) {
         spdlog::error("Could not open pigment config file: {}. Using fallback colors.", config_path);
-        g_available_pigments = {
+        state.g_available_pigments = {
             {"Yellow", {0.959f, 0.802f, 0.035f}},
             {"Blue", {0.077f, 0.028f, 0.248f}},
             {"White", {0.995f, 0.999f, 0.997f}},
@@ -84,7 +68,7 @@ void loadPigmentConfig(const std::string& path) {
                         pigment.rgb[0] = rgb[0];
                         pigment.rgb[1] = rgb[1];
                         pigment.rgb[2] = rgb[2];
-                        g_available_pigments.push_back(pigment);
+                        state.g_available_pigments.push_back(pigment);
                     }
                 }
             }
@@ -94,20 +78,20 @@ void loadPigmentConfig(const std::string& path) {
     }
 
     // Prepare names for ImGui and update initial g_colors
-    g_pigment_names.clear();
-    for (const auto& pigment : g_available_pigments) {
-        g_pigment_names.push_back(pigment.name.c_str());
+    state.g_pigment_names.clear();
+    for (const auto& pigment : state.g_available_pigments) {
+        state.g_pigment_names.push_back(pigment.name.c_str());
     }
 
     // Set initial colors based on default indices
     for (int i = 0; i < 4; ++i) {
-        if (i < g_available_pigments.size()) {
+        if (i < state.g_available_pigments.size()) {
             // Ensure default indices are valid
-            g_selected_pigment_indices[i] = std::min(g_selected_pigment_indices[i], (int)g_available_pigments.size() - 1);
-            const auto& pigment = g_available_pigments[g_selected_pigment_indices[i]];
-            g_colors[i][0] = pigment.rgb[0];
-            g_colors[i][1] = pigment.rgb[1];
-            g_colors[i][2] = pigment.rgb[2];
+            state.g_selected_pigment_indices[i] = std::min(state.g_selected_pigment_indices[i], (int)state.g_available_pigments.size() - 1);
+            const auto& pigment = state.g_available_pigments[state.g_selected_pigment_indices[i]];
+            state.g_colors[i][0] = pigment.rgb[0];
+            state.g_colors[i][1] = pigment.rgb[1];
+            state.g_colors[i][2] = pigment.rgb[2];
         }
     }
 }
@@ -307,6 +291,7 @@ void renderSpheres(bool firstRender = false) {
 #endif
 
     clearWindow();
+
 #ifdef MEASURE_TIME
     ctimer.start(3);
 #endif
@@ -327,7 +312,8 @@ void renderSpheres(bool firstRender = false) {
     timer.end(0);
 #endif
 
-    if (state.takeScreenshot && state.play) {
+    // Take screenshot only if enabled, simulation is running, and we are past the stabilization frames.
+    if (state.takeScreenshot && state.play && !firstRender && mpm->getFrame() >= state.stabilizeFrames) {
         saveImage(state.outputDir, window);
     }
 }
@@ -337,7 +323,7 @@ void renderSpheres(bool firstRender = false) {
  */
 void physicsInit() {
     mpm = new MPMIntegrationSim();
-    mpm->setupScene(state.FPS);
+    mpm->setupScene(state.FPS, state.g_spatula_anim_path);
 }
 
 /**
@@ -358,68 +344,68 @@ void guiStart(bool &start) {
     float bw = vp->WorkSize.x * 0.5f;
     float bh = 80.0f;
 
-    float totalH = (bh * 2) + 160.0f + (g_num_colors * 40.0f) + 80.0f; // Increased for preview
+    float totalH = (bh * 2) + 160.0f + (state.g_num_colors * 40.0f) + 80.0f; // Increased for preview
 
     ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - bw) * 0.5f, (vp->WorkSize.y - totalH) * 0.5f));
 
     ImGui::BeginGroup();
 
-    static int prev_num_colors = g_num_colors;
+    static int prev_num_colors = state.g_num_colors;
     ImGui::PushItemWidth(bw);
     
     // When the number of colors changes, each gets a basic minimum of 10%
-    if (ImGui::SliderInt("Number of colors", &g_num_colors, 2, 4)) {
-        if (g_num_colors != prev_num_colors) {
-            for (int i = 0; i < g_num_colors; ++i) g_ratios[i] = 0.1f;
-            for (int i = g_num_colors; i < 4; ++i) g_ratios[i] = 0.0f;
-            prev_num_colors = g_num_colors;
+    if (ImGui::SliderInt("Number of colors", &state.g_num_colors, 2, 4)) {
+        if (state.g_num_colors != prev_num_colors) {
+            for (int i = 0; i < state.g_num_colors; ++i) state.g_ratios[i] = 0.1f;
+            for (int i = state.g_num_colors; i < 4; ++i) state.g_ratios[i] = 0.0f;
+            prev_num_colors = state.g_num_colors;
         }
     }
     
     // Calculate unallocated free volume
     float current_sum = 0.0f;
-    for (int i = 0; i < g_num_colors; ++i) current_sum += g_ratios[i];
+    for (int i = 0; i < state.g_num_colors; ++i) current_sum += state.g_ratios[i];
     float unallocated = std::max(0.0f, 1.0f - current_sum);
 
     ImVec4 unallocatedColor = (unallocated > 0.005f) ? ImVec4(0.9f, 0.7f, 0.0f, 1.0f) : ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
-    ImGui::TextColored(unallocatedColor, "Remaining volume: %.0f %%", unallocated * 100.0f);
+    ImGui::TextColored(unallocatedColor, "Remaining volume: %.2f", unallocated);
     ImGui::Dummy(ImVec2(0, 5));
 
     // Fixed maximum value for the visual range of the sliders (prevents them from jumping)
-    float fixed_max = 1.0f - 0.1f * (g_num_colors - 1);
+    float fixed_max = 1.0f - 0.1f * (state.g_num_colors - 1);
 
-    for (int i = 0; i < g_num_colors; ++i) {
+    for (int i = 0; i < state.g_num_colors; ++i) {
         ImGui::PushID(i);
         
         // Preview
-        ImGui::ColorButton("##ColorPreview", ImVec4(g_colors[i][0], g_colors[i][1], g_colors[i][2], 1.0f));
+        ImGui::ColorButton("##ColorPreview", ImVec4(state.g_colors[i][0], state.g_colors[i][1], state.g_colors[i][2], 1.0f));
         ImGui::SameLine();
 
         // Dropdown
         ImGui::PushItemWidth(150);
-        if (ImGui::Combo("##Color", &g_selected_pigment_indices[i], g_pigment_names.data(), g_pigment_names.size())) {
+        if (ImGui::Combo("##Color", &state.g_selected_pigment_indices[i], state.g_pigment_names.data(), state.g_pigment_names.size())) {
             // When a new pigment is selected, just update the color for the current slot.
             // The logic to prevent duplicates has been removed.
-            const auto& selected_pigment = g_available_pigments[g_selected_pigment_indices[i]];
-            g_colors[i][0] = selected_pigment.rgb[0];
-            g_colors[i][1] = selected_pigment.rgb[1];
-            g_colors[i][2] = selected_pigment.rgb[2];
+            const auto& selected_pigment = state.g_available_pigments[state.g_selected_pigment_indices[i]];
+            state.g_colors[i][0] = selected_pigment.rgb[0];
+            state.g_colors[i][1] = selected_pigment.rgb[1];
+            state.g_colors[i][2] = selected_pigment.rgb[2];
         }
         ImGui::PopItemWidth();
         ImGui::SameLine();
 
-        if (ImGui::SliderFloat("Ratio", &g_ratios[i], 0.1f, fixed_max, "%.2f")) {
-            g_ratios[i] = roundf(g_ratios[i] * 100.0f) / 100.0f;
+        if (ImGui::SliderFloat("Ratio", &state.g_ratios[i], 0.1f, fixed_max, "%.2f")) {
+            state.g_ratios[i] = roundf(state.g_ratios[i] * 100.0f) / 100.0f;
             
             // Calculate the actual physical limit for the given slider based on the other colors
             float sum_others = 0.0f;
-            for (int j = 0; j < g_num_colors; ++j) {
-                if (i != j) sum_others += g_ratios[j];
+            for (int j = 0; j < state.g_num_colors; ++j) {
+                if (i != j) sum_others += state.g_ratios[j];
             }
             float true_max_allowed = std::max(0.1f, 1.0f - sum_others);
             
             // Do not allow the user to drag the value higher than physically possible
-            g_ratios[i] = std::max(0.1f, std::min(g_ratios[i], true_max_allowed));
+            state.g_ratios[i] = std::max(0.1f, std::min(state.g_ratios[i], true_max_allowed));
         }
         ImGui::PopID();
     }
@@ -430,15 +416,15 @@ void guiStart(bool &start) {
     ImGui::Text("Expected mixed result:");
     float mixed_latent[MIXBOX_NUMLATENTS] = {0.0f};
     float total_ratio = 0.0f;
-    for (int i = 0; i < g_num_colors; ++i) {
-        total_ratio += g_ratios[i];
+    for (int i = 0; i < state.g_num_colors; ++i) {
+        total_ratio += state.g_ratios[i];
     }
     float preview_r = 0.0f, preview_g = 0.0f, preview_b = 0.0f;
     if (total_ratio > 0.001f) {
-        for (int i = 0; i < g_num_colors; ++i) {
+        for (int i = 0; i < state.g_num_colors; ++i) {
             float latent[MIXBOX_NUMLATENTS];
-            mixbox_srgb32f_to_latent(g_colors[i][0], g_colors[i][1], g_colors[i][2], latent);
-            float weight = g_ratios[i] / total_ratio;
+            mixbox_srgb32f_to_latent(state.g_colors[i][0], state.g_colors[i][1], state.g_colors[i][2], latent);
+            float weight = state.g_ratios[i] / total_ratio;
             for (int j = 0; j < MIXBOX_NUMLATENTS; ++j) {
                 mixed_latent[j] += latent[j] * weight;
             }
@@ -666,12 +652,21 @@ int mainComputeLoop() {
     ctimer.init();
 #endif
     bool startScene = false;
+    static bool recording_started_message = false;
     while(!glfwWindowShouldClose(window)) {
         if (!startScene) {
             clearWindow();
 
             guiStart(startScene);
             if (startScene) {
+                std::cout << "--- Starting Simulation ---" << std::endl;
+                for (int i = 0; i < state.g_num_colors; ++i) {
+                    const char* color_name = state.g_pigment_names[state.g_selected_pigment_indices[i]];
+                    std::cout << "  - {}: {:.2f}" << color_name << ": " << state.g_ratios[i] << std::endl;
+                }
+                std::cout << "---------------------------" << std::endl;
+                state.simulationStartTime = std::chrono::high_resolution_clock::now();
+
                 state.changeFontSize = true;
                 physicsInit();
                 a = new AABBc(mpm);
@@ -686,6 +681,13 @@ int mainComputeLoop() {
                 glfwSetWindowShouldClose(window, true);
                 continue;
             }
+
+            if (!recording_started_message && mpm->getFrame() >= state.stabilizeFrames) {
+                std::cout << "--- Stabilization finished. Starting to record frames. ---" << std::endl;
+                state.takeScreenshot = true;
+                recording_started_message = true;
+            }
+
             sim();
             renderSpheres();
             gui();
@@ -732,6 +734,11 @@ int mainComputeLoop() {
             std::cout << "Video created from " << frame_count << " frames and screenshots deleted." << std::endl;
         } else {
             std::cerr << "Failed to create video. Make sure ffmpeg is installed on your system and libx264 is available." << std::endl;
+        }
+        auto endTime = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> total_duration = endTime - state.simulationStartTime;
+        if (total_duration.count() > 0) {
+            std::cout << "Total simulation and video generation time: " << std::fixed << std::setprecision(2) << total_duration.count() / 60.0 << " minutes." << std::endl;
         }
     }
 
@@ -785,15 +792,16 @@ int main() {
                     state.FPS = sim.at("fps").get<int>();
                 }
                 if (sim.contains("animation")) {
-                    g_spatula_anim_path = sim.at("animation").get<std::string>();
+                    state.g_spatula_anim_path = sim.at("animation").get<std::string>();
                 }
             }
-            spdlog::info("Loaded camera settings from {}: pos({}, {}, {})", config_path, camera_pos.x, camera_pos.y, camera_pos.z);
+            std::cout << "Camera position loaded from config: (" << camera_pos.x << ", " << camera_pos.y << ", " << camera_pos.z << ")" << std::endl;
         } catch (const std::exception& e) {
-            spdlog::warn("Error parsing {}: {}. Using default camera settings.", config_path, e.what());
+            std::cout << "Error parsing {}: {}. Using default camera settings." << config_path << ": " << e.what() << std::endl;
         }
     } else {
-        spdlog::info("render_config.json not found. Using default camera settings.");
+        std::cout << "Config file not found: " << config_path << std::endl;
+        std::cout << "Using default camera settings." << std::endl;
     }
 
     camera = new Camera(camera_pos, camera_tgt);

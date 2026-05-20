@@ -6,8 +6,6 @@
 #include "../objects/object_spatula.hpp"
 #include "../../deps/json.hpp"
 
-std::string g_spatula_anim_path = "../matter/animations/spatula_motion.bin";
-
 void Simulation::initializeBasic(std::string name){
     std::cout << "-----------------------------------------------------------------------------------" << std::endl;
     std::cout << "    88b           d88                                                              " << std::endl;
@@ -27,7 +25,7 @@ void Simulation::initializeBasic(std::string name){
     is_initialized = true;
 }
 
-void Simulation::setupScene(const float fps_value, const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments){
+void Simulation::setupScene(const float fps_value, const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments, const std::string& spatula_anim_path){
     openvdb::initialize();
 
     // Read JSON configuration
@@ -38,6 +36,9 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
             pigment_D_max = data.value("D_max", 10e-2f);
             pigment_D_edge0 = data.value("D_edge0", 0.5f);
             pigment_D_edge1 = data.value("D_edge1", 0.8f);
+            start_boost_time = data.value("start_boost_time", 20.0f);
+            end_boost_time = data.value("end_boost_time", 40.0f);
+            boost_factor = data.value("boost_factor", 2.0f);
             debug("Loaded pigment config successfully.");
         } catch (const nlohmann::json::parse_error& e) {
             debug("Parse error in pigment_config.json: ", e.what());
@@ -122,11 +123,11 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
     plates.push_back(std::make_unique<ObjectPlate>(0, PlateType::bottom, BC::SlipStick, 1.0)); 
 
     ////// SPATULA
-    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.0, "hehe", g_spatula_anim_path);
+    auto spatula = std::make_unique<ObjectSpatula>(BC::SlipFree, 0.0, "hehe", spatula_anim_path);
     spatula_ptr = spatula.get();
     objects.push_back(std::move(spatula));
 
-    debug("init done\n");
+    debug("Init particles done\n");
 
     ////// PLASTICITY
     plastic_model = PlasticModel::DPVisc; // Perzyna model with Drucker_Prager yield surface

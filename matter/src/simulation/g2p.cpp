@@ -103,8 +103,20 @@ void Simulation::G2P(){
             // 2. Pro aktuální míchání použijeme zprůměrovanou hodnotu z mřížky,
             //    která byla spočítána v P2G.
             float mix_factor = smoothStep(pigment_D_edge0, pigment_D_edge1, grid_shear_intensity_p);
-            // Přidáno násobení dt pro konzistentní rychlost difúze v čase
-            float scaled_mix_factor = std::clamp(pigment_D_max * mix_factor * (float)dt, 0.0f, 1.0f);
+
+            // 3. Aplikace časového "boostu" pro zrychlení míchání v průběhu času.
+            //    Parametry se načítají z pigment_config.json.
+            float current_time = (float)time;
+            float time_factor = 1.0f;
+            if (current_time > start_boost_time && end_boost_time > start_boost_time) {
+                float t = (current_time - start_boost_time) / (end_boost_time - start_boost_time);
+                t = std::clamp(t, 0.0f, 1.0f); // Lineární náběh od 0 do 1
+                time_factor = 1.0f + t * (boost_factor - 1.0f);
+            }
+
+            // Aplikace časového faktoru na finální `scaled_mix_factor`
+            float dynamic_D_max = pigment_D_max * time_factor;
+            float scaled_mix_factor = std::clamp(dynamic_D_max * mix_factor * (float)dt, 0.0f, 1.0f);
 
             // Symetrická aktualizace: částice se přibližuje k průměrné barvě okolí.
             // p_new = (1 - mix) * p_old + mix * p_avg

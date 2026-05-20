@@ -13,28 +13,20 @@ MPMIntegrationSim::~MPMIntegrationSim(){
     delete sim;
 }
 
-void MPMIntegrationSim::setupScene(int fps){
+void MPMIntegrationSim::setupScene(int fps, const std::string& spatula_anim_path){
     ratios.clear();
     std::vector<Eigen::Matrix<float, 7, 1>> initial_pigments;
     
-    for (int i = 0; i < g_num_colors; ++i) {
-        ratios.push_back(g_ratios[i]);
+    for (int i = 0; i < state.g_num_colors; ++i) {
+        ratios.push_back(state.g_ratios[i]);
 
         Eigen::Matrix<float, 7, 1> p = Eigen::Matrix<float, 7, 1>::Zero();
-        mixbox_srgb32f_to_latent(g_colors[i][0], g_colors[i][1], g_colors[i][2], p.data());
+        mixbox_srgb32f_to_latent(state.g_colors[i][0], state.g_colors[i][1], state.g_colors[i][2], p.data());
         initial_pigments.push_back(p);
-
-        // print the rgb colors and latent pigments for debugging
-        std::cout << "Color " << i << ": RGB(" << g_colors[i][0] << ", " << g_colors[i][1] << ", " << g_colors[i][2] << ") -> Latent(";
-        for (int c = 0; c < 7; ++c) {
-            std::cout << p(c);
-            if (c < 6) std::cout << ", ";   
-        }
-        std::cout << ")" << std::endl;
     }
 
     sim->initializeBasic("mpm_integration_test");
-    sim->setupScene(fps, ratios, initial_pigments);
+    sim->setupScene(fps, ratios, initial_pigments, spatula_anim_path);
     sim->prepareSimulation();
     particles.resize(getParticleAmount());
     pigments.resize(getParticleAmount());

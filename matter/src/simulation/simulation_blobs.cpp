@@ -5,21 +5,6 @@
 #include <utility>
 
 void Simulation::blobs(const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments) {
-    // TEMP for testing purposes
-    // ObjectVdb blob_left("../matter/levelsets/Blob_left_rotated.vdb", BC::NoSlip, 0.0, TV(0.0f, 0.0f, 0.0f));
-    // ObjectVdb blob_right("../matter/levelsets/Blob_right_rotated.vdb");
-    // blob_left.scale = 0.2; blob_right.scale = 0.2;
-    // // ObjectVdb blob_left("../matter/levelsets/blobs/Blob_01.vdb");
-    // // ObjectVdb blob_right("../matter/levelsets/blobs/Blob_02.vdb");
-    // // ObjectVdb blob_right1("../matter/levelsets/blobs/Blob_03.vdb");
-    // // ObjectVdb blob_right2("../matter/levelsets/blobs/Blob_04.vdb");
-    // // ObjectVdb blob_right3("../matter/levelsets/blobs/Blob_05.vdb");
-    // // ObjectVdb blob_right4("../matter/levelsets/blobs/Blob_06.vdb");
-    // std::vector<ObjectVdb*> vdb_objects = {&blob_left, &blob_right};
-    // sampleParticlesFromVdb(*this, vdb_objects, pigments, 0.01f);
-    // return;
-    // END TEMP
-    
     std::vector<std::unique_ptr<ObjectVdb>> vdb_objects_storage;
     std::vector<ObjectVdb*> vdb_objects_ptrs;
 
@@ -60,7 +45,7 @@ void Simulation::blobs(const std::vector<float>& colorRatios, const std::vector<
         TV min_bbox, max_bbox;
         blob->bounds(min_bbox, max_bbox);
         base_centers[i] = (min_bbox + max_bbox) * 0.5f;
-        
+
         // Compute an enclosing radius from the base bounding box
         float r_x = (max_bbox(0) - min_bbox(0)) * 0.5f;
 #ifdef THREEDIM
@@ -68,9 +53,9 @@ void Simulation::blobs(const std::vector<float>& colorRatios, const std::vector<
 #else
         float r_z = r_x;
 #endif
-        // VDB bounding boxes include a narrow band of active voxels (padding).
-        // We reduce the bounding box radius by a factor to pack them tightly.
-        radii[i] = std::max(r_x, r_z) * 0.8f;
+        // The bounding box from VDB includes padding. We subtract a small fixed amount
+        // (approximating one particle radius) to get a tighter packing radius.
+        radii[i] = std::max(r_x, r_z) - 0.055f;
 
         vdb_objects_storage.push_back(std::move(blob));
         vdb_objects_ptrs.push_back(vdb_objects_storage.back().get());
@@ -151,9 +136,7 @@ void Simulation::blobs(const std::vector<float>& colorRatios, const std::vector<
         TV center = (min_bounds + max_bounds) * 0.5f;
         center(1) = 0.0f; // Keep grounded in Y
         for (size_t i = 0; i < n; ++i) {
-            offsets[i] -= center;
-            
-            TV final_offset = offsets[i];
+            TV final_offset = offsets[i] - center;
             final_offset(0) -= base_centers[i](0);
 #ifdef THREEDIM
             final_offset(2) -= base_centers[i](2);

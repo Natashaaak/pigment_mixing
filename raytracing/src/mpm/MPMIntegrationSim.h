@@ -6,10 +6,6 @@
 class BinaryDensityGrid;
 class AABBc;
 
-extern int g_num_colors;
-extern float g_colors[4][3];
-extern float g_ratios[4];
-
 class MPMIntegrationSim {
 public:
     MPMIntegrationSim();
@@ -19,7 +15,7 @@ public:
     bool isTimeToRender();
     bool isFinished() const;
     void calculateAndPrintFinalColor() const;
-    void setupScene(int fps);
+    void setupScene(int fps, const std::string& spatula_anim_path);
 
     /**
      * Returns radius of a single particle, every particle shares the same radius
