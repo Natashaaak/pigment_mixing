@@ -353,14 +353,20 @@ void guiStart(bool &start) {
     static int prev_num_colors = state.g_num_colors;
     ImGui::PushItemWidth(bw);
     
+    ImGui::Text("Number of colors");
     // When the number of colors changes, each gets a basic minimum of 10%
-    if (ImGui::SliderInt("Number of colors", &state.g_num_colors, 2, 4)) {
+    if (ImGui::SliderInt("##NumColors", &state.g_num_colors, 2, 4)) {
         if (state.g_num_colors != prev_num_colors) {
             for (int i = 0; i < state.g_num_colors; ++i) state.g_ratios[i] = 0.1f;
             for (int i = state.g_num_colors; i < 4; ++i) state.g_ratios[i] = 0.0f;
             prev_num_colors = state.g_num_colors;
         }
     }
+    ImGui::PopItemWidth();
+    ImGui::Dummy(ImVec2(0, 20));
+
+    ImGui::Text("Select colors and their ratios:");
+    ImGui::Dummy(ImVec2(0, 5));
     
     // Calculate unallocated free volume
     float current_sum = 0.0f;
@@ -374,42 +380,42 @@ void guiStart(bool &start) {
     // Fixed maximum value for the visual range of the sliders (prevents them from jumping)
     float fixed_max = 1.0f - 0.1f * (state.g_num_colors - 1);
 
-    for (int i = 0; i < state.g_num_colors; ++i) {
-        ImGui::PushID(i);
-        
-        // Preview
-        ImGui::ColorButton("##ColorPreview", ImVec4(state.g_colors[i][0], state.g_colors[i][1], state.g_colors[i][2], 1.0f));
-        ImGui::SameLine();
+    if (ImGui::BeginTable("color_selector", 3, 0, ImVec2(bw, 0))) {
+        ImGui::TableSetupColumn("Preview", ImGuiTableColumnFlags_WidthFixed, 0.0f);
+        ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+        ImGui::TableSetupColumn("Ratio", ImGuiTableColumnFlags_WidthStretch);
 
-        // Dropdown
-        ImGui::PushItemWidth(150);
-        if (ImGui::Combo("##Color", &state.g_selected_pigment_indices[i], state.g_pigment_names.data(), state.g_pigment_names.size())) {
-            // When a new pigment is selected, just update the color for the current slot.
-            // The logic to prevent duplicates has been removed.
-            const auto& selected_pigment = state.g_available_pigments[state.g_selected_pigment_indices[i]];
-            state.g_colors[i][0] = selected_pigment.rgb[0];
-            state.g_colors[i][1] = selected_pigment.rgb[1];
-            state.g_colors[i][2] = selected_pigment.rgb[2];
-        }
-        ImGui::PopItemWidth();
-        ImGui::SameLine();
+        for (int i = 0; i < state.g_num_colors; ++i) {
+            ImGui::PushID(i);
+            ImGui::TableNextRow();
 
-        if (ImGui::SliderFloat("Ratio", &state.g_ratios[i], 0.1f, fixed_max, "%.2f")) {
-            state.g_ratios[i] = roundf(state.g_ratios[i] * 100.0f) / 100.0f;
-            
-            // Calculate the actual physical limit for the given slider based on the other colors
-            float sum_others = 0.0f;
-            for (int j = 0; j < state.g_num_colors; ++j) {
-                if (i != j) sum_others += state.g_ratios[j];
+            ImGui::TableSetColumnIndex(0);
+            ImGui::ColorButton("##ColorPreview", ImVec4(state.g_colors[i][0], state.g_colors[i][1], state.g_colors[i][2], 1.0f));
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::Combo("##Color", &state.g_selected_pigment_indices[i], state.g_pigment_names.data(), state.g_pigment_names.size())) {
+                const auto& selected_pigment = state.g_available_pigments[state.g_selected_pigment_indices[i]];
+                state.g_colors[i][0] = selected_pigment.rgb[0];
+                state.g_colors[i][1] = selected_pigment.rgb[1];
+                state.g_colors[i][2] = selected_pigment.rgb[2];
             }
-            float true_max_allowed = std::max(0.1f, 1.0f - sum_others);
-            
-            // Do not allow the user to drag the value higher than physically possible
-            state.g_ratios[i] = std::max(0.1f, std::min(state.g_ratios[i], true_max_allowed));
+
+            ImGui::TableSetColumnIndex(2);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::SliderFloat("Ratio", &state.g_ratios[i], 0.1f, fixed_max, "%.2f")) {
+                state.g_ratios[i] = roundf(state.g_ratios[i] * 100.0f) / 100.0f;
+                float sum_others = 0.0f;
+                for (int j = 0; j < state.g_num_colors; ++j) {
+                    if (i != j) sum_others += state.g_ratios[j];
+                }
+                float true_max_allowed = std::max(0.1f, 1.0f - sum_others);
+                state.g_ratios[i] = std::max(0.1f, std::min(state.g_ratios[i], true_max_allowed));
+            }
+            ImGui::PopID();
         }
-        ImGui::PopID();
+        ImGui::EndTable();
     }
-    ImGui::PopItemWidth();
     ImGui::Dummy(ImVec2(0, 20));
 
     // Preview of the mixed color
