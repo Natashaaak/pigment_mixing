@@ -24,6 +24,9 @@ add_definitions(-DEXTERNAL_SHADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/shaders")
 # --- External Subdirectories ---
 add_subdirectory(external/spdlog)
 
+# Přidání mixboxu jako podadresáře, který se zkompiluje do vlastní knihovny
+add_subdirectory(src/mixbox)
+
 set(CMAKE_DEBUG_POSTFIX "d")
 set(CMAKE_RELWITHDEBINFO_POSTFIX "rd")
 set(CMAKE_MINSIZEREL_POSTFIX "ms")
@@ -78,8 +81,7 @@ add_executable(pigment-mixing
     src/raymarch/HDRLoader.h
     src/raymarch/SpatulaMesh.cpp
     src/raymarch/SpatulaMesh.h
-    src/mixbox/mixbox.h
-    src/mixbox/mixbox.cpp
+    # mixbox.cpp a .h jsou nyní součástí cíle 'mixbox_library'
 )
 
 # --- Compiler & Linker Options ---
@@ -102,9 +104,8 @@ endif()
 # --- Include Directories ---
 target_include_directories(pigment-mixing PRIVATE 
     ${OPENGL_INCLUDE_DIRS} 
-    OpenMP::OpenMP_CXX 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mixbox
+    OpenMP::OpenMP_CXX
+    ${CMAKE_CURRENT_SOURCE_DIR}/src # src/mixbox bude přidán automaticky přes mixbox_library
     ${CMAKE_CURRENT_SOURCE_DIR}/imgui                # ImGui headers [cite: 3]
     ${CMAKE_CURRENT_SOURCE_DIR}/external/glfw/include # GLFW headers
 )
@@ -117,6 +118,7 @@ target_link_libraries(pigment-mixing PRIVATE
     glm::glm 
     glfw        # Link the target created by add_subdirectory(external/glfw) [cite: 5]
     spdlog::spdlog 
+    mixbox_library # Propojení s nově vytvořenou knihovnou mixbox
     matter_lib
     $<$<PLATFORM_ID:Linux>:m>
 )
