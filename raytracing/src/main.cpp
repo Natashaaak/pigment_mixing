@@ -140,13 +140,37 @@ void saveImage(const std::string& directory, GLFWwindow* win) {
 void processInput(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
         state.play = !state.play;
-    if (key == GLFW_KEY_S && action == GLFW_PRESS) {
-        camera->setPos(camera->cameraPos - (camera->camForward * 0.5f));
+        state.fullRender = true;
+            state.recalcMarchParams = true;
+        camera->rot = false;
+        debug("Simulation is ", state.play ? "running" : "paused");
     }
-    if (key == GLFW_KEY_W && action == GLFW_PRESS) {
-        camera->setPos(camera->cameraPos + (camera->camForward * 0.5f));
+    if (!state.play) {
+        float cameraSpeed = 0.5f;
+        if (key == GLFW_KEY_S && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+            camera->setPos(camera->cameraPos - (camera->camForward * cameraSpeed));
+        }
+        if (key == GLFW_KEY_W && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+            camera->setPos(camera->cameraPos + (camera->camForward * cameraSpeed));
+        }
+        if (key == GLFW_KEY_A && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+            camera->target -= camera->camRight * cameraSpeed;
+            camera->cameraPos -= camera->camRight * cameraSpeed;
+        }
+        if (key == GLFW_KEY_D && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+            camera->target += camera->camRight * cameraSpeed;
+            camera->cameraPos += camera->camRight * cameraSpeed;
+        }
+        if (key == GLFW_KEY_E && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+            camera->target += camera->camUp * cameraSpeed;
+            camera->cameraPos += camera->camUp * cameraSpeed;
+        }
+        if (key == GLFW_KEY_Q && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+            camera->target -= camera->camUp * cameraSpeed;
+            camera->cameraPos -= camera->camUp * cameraSpeed;
+        }
     }
     if (key == GLFW_KEY_P && action == GLFW_PRESS) {
         state.takeScreenshot = !state.takeScreenshot;
@@ -154,13 +178,14 @@ void processInput(GLFWwindow *window, int key, int scancode, int action, int mod
     }
     if (key == GLFW_KEY_F && action == GLFW_PRESS) {
         state.fullRender = !state.fullRender;
+            state.recalcMarchParams = true;
         debug("Full render: ", state.fullRender);
     }
 }
 
 void mouseButtonCallback(GLFWwindow* w, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-        if (action == GLFW_PRESS) {
+        if (action == GLFW_PRESS && !state.play) {
             camera->rot = true;
             glfwGetCursorPos(w, &camera->lastX, &camera->lastY);
         } else if (action == GLFW_RELEASE) {
@@ -170,7 +195,7 @@ void mouseButtonCallback(GLFWwindow* w, int button, int action, int mods) {
 }
 
 void cursorPosCallback(GLFWwindow* w, double x, double y) {
-    if (!camera->rot)
+    if (!camera->rot || state.play)
         return;
     camera->yaw -= static_cast<float>(x - camera->lastX) * camera->sense;
     camera->pitch += static_cast<float>(y - camera->lastY) * camera->sense;
@@ -295,7 +320,11 @@ void renderSpheres(bool firstRender = false) {
 #ifdef MEASURE_TIME
     ctimer.start(3);
 #endif
-    mpm->recountParticles();
+    static bool first_recount = true;
+    if (state.play || state.recalcMarchParams || first_recount) {
+        mpm->recountParticles();
+    }
+    first_recount = false;
 #ifdef MEASURE_TIME
     ctimer.end(3);
 #endif
@@ -488,7 +517,8 @@ void gui() {
     ImGuiIO& io = ImGui::GetIO();
 
     ImGui::BeginChild("Settings", ImVec2(28*state.fonts[state.fontChoice], 0), true);
-
+    
+    bool physics_dirty = false;
     
     if (ImGui::CollapsingHeader("Iso Value", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("Auto ISO:");
@@ -499,6 +529,7 @@ void gui() {
                 float q = state.vdall/h;
                 state.iso = state.kern/(h*h*h)*pow(1.0f - q*q, 3);
             }
+            physics_dirty = true;
         }
         ImGui::Text("vdall:");
         if (ImGui::SliderFloat("##vdall", &state.vdall, 0.001f, 0.2f, "%.4f")) {
@@ -507,10 +538,11 @@ void gui() {
                 float q = state.vdall/h;
                 state.iso = state.kern/(h*h*h)*pow(1.0f - q*q, 3);
             }
+            physics_dirty = true;
         }
         ImGui::BeginDisabled(state.autoISO);
         ImGui::Text("ISO:");
-        ImGui::SliderFloat("##ISO", &state.iso, 0.01f, 5000);
+        if (ImGui::SliderFloat("##ISO", &state.iso, 0.01f, 5000)) physics_dirty = true;
         ImGui::EndDisabled();
     }
     ImGui::Spacing();
@@ -537,10 +569,11 @@ void gui() {
             if (state.params.y > state.params.x - 0.01f) {
                 state.params.y = state.params.x - 0.01f;
             }
+            physics_dirty = true;
         }
 
         ImGui::Text("Factor b for BDG construction:");
-        ImGui::SliderFloat("##bfactor", &state.params.y, 0.01f, state.params.x-0.01f, "%.2f");
+        if (ImGui::SliderFloat("##bfactor", &state.params.y, 0.01f, state.params.x-0.01f, "%.2f")) physics_dirty = true;
     }
     ImGui::Spacing();
     ImGui::Spacing();
@@ -568,21 +601,21 @@ void gui() {
     ImGui::Spacing();
     if (ImGui::CollapsingHeader("Anisotropy for surface construction", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("Anisotropy for rendering:");
-        ImGui::Checkbox("##Anisotropy", &state.isAni);
+        if (ImGui::Checkbox("##Anisotropy", &state.isAni)) physics_dirty = true;
 
         ImGui::Text("Auto scale factor for anisotropy:");
-        ImGui::Checkbox("##AutoSfactor", &state.autoScaleS);
+        if (ImGui::Checkbox("##AutoSfactor", &state.autoScaleS)) physics_dirty = true;
 
         ImGui::BeginDisabled(state.autoScaleS);
         ImGui::Text("Scale factor for anisotropy:");
-        ImGui::SliderFloat("##Sfactor", &state.s, 1.0f, 2400.0f);
+        if (ImGui::SliderFloat("##Sfactor", &state.s, 1.0f, 2400.0f)) physics_dirty = true;
         ImGui::EndDisabled();
 
         ImGui::BeginDisabled(!state.isAni);
         ImGui::Text("Anisotropy threshold:");
-        ImGui::SliderInt("##Anisotropythreshold", &state.aniso_threshold, 2, 25);
+        if (ImGui::SliderInt("##Anisotropythreshold", &state.aniso_threshold, 2, 25)) physics_dirty = true;
         ImGui::Text("Anisotropy k (clamping):");
-        ImGui::SliderFloat("##AnisotropyK", &state.k, 0.1f, 10.0f);
+        if (ImGui::SliderFloat("##AnisotropyK", &state.k, 0.1f, 10.0f)) physics_dirty = true;
         ImGui::EndDisabled();
     }
     ImGui::Spacing();
@@ -602,6 +635,8 @@ void gui() {
         ImGui::SliderFloat("Sigma Spatial", &state.sigma_spatial, 0.01f, 10.0f);
         ImGui::Checkbox("Show Normals blending (Red/Blue)", &state.showNormals);
     }
+
+    if (physics_dirty) state.recalcMarchParams = true;
     ImGui::Spacing();
     ImGui::Spacing();
     ImGui::Separator();

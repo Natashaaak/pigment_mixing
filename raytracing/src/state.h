@@ -43,7 +43,7 @@ struct State {
     bool startMarch = false;
     bool fullRender = false; // Toggle between preview (Blinn-Phong) and full render (Cook-Torrance + Skybox)
     bool recalcMarchParams = true;
-    bool play = true;
+    bool play = false;
     bool changeFontSize = false;
     int maxStepCount = 180;
     int maxSkipCount = 176;

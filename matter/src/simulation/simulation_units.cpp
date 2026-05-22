@@ -111,12 +111,6 @@ void Simulation::setupScene(const float fps_value, const std::vector<float>& col
  
     grid_reference_point = TV::Zero();
 
-    // print color ratios
-    debug("Color Ratios:");
-    for (size_t i = 0; i < colorRatios.size(); ++i) {
-        debug("  Color ", i, ": ", colorRatios[i]);
-    } 
-
     blobs(colorRatios, pigments);
 
     ////// FLOOR OBJECTS

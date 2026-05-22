@@ -403,20 +403,26 @@ void RayMarch::renderTex(Camera* camera) {
 
 void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera) {
     resizeTexutres(ww, wh);
-    // if (state.play) {
+
+    static bool first_run = true;
+    bool update_physics = state.play || state.recalcMarchParams || first_run;
+
 #ifdef MEASURE_TIME
     ctimer.start(1);
 #endif
-    a->fixedAABB(mpm);
-    bdg->createVectors(a, mpm);
-    bdg->fillBDG(a, mpm);
-    
-    // Pass 1: Set grid data so neighbors can be queried by Classification
-    mpm->setGridData(bdg, a);
+
+    if (update_physics) {
+        a->fixedAABB(mpm);
+        bdg->createVectors(a, mpm);
+        bdg->fillBDG(a, mpm);
+        // Pass 1: Set grid data so neighbors can be queried by Classification
+        mpm->setGridData(bdg, a);
+    }
+
     // Pass 2: Generate depth maps & calculate anisotropic matrices
     depthMaps->generateDepthMaps(mpm, ww, wh, camera);
     // Pass 3: Fill pigment grid using the newly computed anisotropic matrices
-    if(state.fullRender) {
+    if(state.fullRender && update_physics) {
         bdg->fillRenderGrid(mpm, a, depthMaps->getc()->getMatrices());
     }
 
@@ -500,6 +506,9 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
     shader->setUniform("has_spatula", mpm->spatulaExists());
     shader->setUniform("spatulaDim", mpm->getSpatulaDim());
     
+    first_run = false;
+    state.recalcMarchParams = false;
+
     std::vector<glm::vec3> finalLightColors;
     finalLightColors.reserve(lightDirs.size());
     for (size_t i = 0; i < lightDirs.size(); ++i) {
