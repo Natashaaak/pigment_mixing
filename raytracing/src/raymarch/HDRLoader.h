@@ -7,7 +7,7 @@
 class HDRLoader {
 public:
     /**
-     * Načte HDR obrázek ze zadané cesty, převede ho na Cubemap texturu a vygeneruje Irradiance mapu pro IBL.
+     * Loads an HDR image from the specified path, converts it to a Cubemap texture, and generates an Irradiance map for IBL.
      */
     static void loadHDRCubemap(const std::string& path, GLuint& envMap, GLuint& irradianceMap);
 };

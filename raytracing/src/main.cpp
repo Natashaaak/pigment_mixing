@@ -221,7 +221,7 @@ int createWindow() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_SAMPLES, 4); // Přidání 4x MSAA
+    glfwWindowHint(GLFW_SAMPLES, 4); // Enable 4x MSAA
     window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Pigment Mixing", nullptr, nullptr);
     if (window == nullptr) {
         std::cerr << "ERROR: glfw window not created" << std::endl;
@@ -245,7 +245,7 @@ int createWindow() {
         return -1;
     }
 
-    glEnable(GL_MULTISAMPLE); // Povolení MSAA
+    glEnable(GL_MULTISAMPLE); // Enable MSAA
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -703,7 +703,7 @@ int mainComputeLoop() {
                 std::cout << "--- Starting Simulation ---" << std::endl;
                 for (int i = 0; i < state.g_num_colors; ++i) {
                     const char* color_name = state.g_pigment_names[state.g_selected_pigment_indices[i]];
-                    std::cout << "  - {}: {:.2f}" << color_name << ": " << state.g_ratios[i] << std::endl;
+                    std::cout << "  - {" << color_name << "}: " << state.g_ratios[i] << std::endl;
                 }
                 std::cout << "---------------------------" << std::endl;
                 state.simulationStartTime = std::chrono::high_resolution_clock::now();
@@ -808,7 +808,7 @@ int main() {
     std::string config_path = "../render_config.json";
     std::ifstream f(config_path);
     if (!f.is_open()) {
-        config_path = "render_config.json"; // Fallback pokud program běží mimo build složku
+        config_path = "render_config.json"; // Fallback if the program is run outside the build folder
         f.open(config_path);
     }
 

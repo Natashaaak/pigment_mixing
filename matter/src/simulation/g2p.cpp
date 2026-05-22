@@ -93,37 +93,37 @@ void Simulation::G2P(){
 
             // --- Symmetric Mixing Logic ---
 
-            // 1. Vypočítáme novou intenzitu smyku pro tuto částici z gradientu rychlosti.
-            //    Tato hodnota se uloží a použije se v P2G v příštím kroku.
+            // 1. Calculate the new shear intensity for this particle from the velocity gradient.
+            //    This value is stored and will be used in P2G in the next step.
             TM S = 0.5f * (L + L.transpose());
             float new_shear_intensity = S.norm();
-            // Uložíme surovou intenzitu smyku. smoothStep se aplikuje až na zprůměrovanou hodnotu.
+            // Store the raw shear intensity. smoothStep is applied to the averaged value.
             particles.diffusion_factor[p] = new_shear_intensity;
 
-            // 2. Pro aktuální míchání použijeme zprůměrovanou hodnotu z mřížky,
-            //    která byla spočítána v P2G.
+            // 2. For the current mixing, use the averaged value from the grid,
+            //    which was calculated in P2G.
             float mix_factor = smoothStep(pigment_D_edge0, pigment_D_edge1, grid_shear_intensity_p);
 
-            // 3. Aplikace časového "boostu" pro zrychlení míchání v průběhu času.
-            //    Parametry se načítají z pigment_config.json.
+            // 3. Apply a time "boost" to accelerate mixing over time.
+            //    Parameters are loaded from pigment_config.json.
             float current_time = (float)time;
             float time_factor = 1.0f;
             if (current_time > start_boost_time && end_boost_time > start_boost_time) {
                 float t = (current_time - start_boost_time) / (end_boost_time - start_boost_time);
-                t = std::clamp(t, 0.0f, 1.0f); // Lineární náběh od 0 do 1
+                t = std::clamp(t, 0.0f, 1.0f); // Linear ramp from 0 to 1
                 time_factor = 1.0f + t * (boost_factor - 1.0f);
             }
 
-            // Aplikace časového faktoru na finální `scaled_mix_factor`
+            // Apply the time factor to the final `scaled_mix_factor`
             float dynamic_D_max = pigment_D_max * time_factor;
             float scaled_mix_factor = std::clamp(dynamic_D_max * mix_factor * (float)dt, 0.0f, 1.0f);
 
-            // Symetrická aktualizace: částice se přibližuje k průměrné barvě okolí.
+            // Symmetric update: the particle approaches the average color of its surroundings.
             // p_new = (1 - mix) * p_old + mix * p_avg
             particles.pigments[p] = (1.0f - scaled_mix_factor) * particles.pigments[p] + scaled_mix_factor * grid_pigment_p;
 
-            // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
-            // Normalizujeme vždy, pokud je přítomen nějaký pigment, abychom opravili numerické chyby.
+            // Since we are working only with opaque pigments, their sum should always be 1.
+            // Always normalize if any pigment is present to correct for numerical errors.
             float pigment_sum = particles.pigments[p].head<4>().sum();
             if (pigment_sum > 1e-6f) {
                 particles.pigments[p].head<4>() /= pigment_sum;

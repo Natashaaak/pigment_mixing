@@ -171,8 +171,8 @@ private:
             resolvedPath = std::string(EXTERNAL_SHADER_PATH) + "/" + relativeSubPath;
             
             // Try once again
-            file.clear(); // Nutné vyčistit failbit streamu před dalším pokusem o otevření
-            file.open(resolvedPath, std::ios::in | std::ios::binary);
+            file.clear(); 
+            file.open(resolvedPath, std::ios::in | std::ios::binary); // Necessary to clear the stream's failbit before another attempt to open
 #endif
         }
 
@@ -181,7 +181,7 @@ private:
             throw std::runtime_error("File reading error at shader compilation");
         }
 
-        // Extrahujeme adresář, abychom věděli, kde relativně hledat vkládané soubory
+        // Extract the directory to know where to look for included files relatively
         std::string directory;
         size_t lastSlash = resolvedPath.find_last_of("/\\");
         if (lastSlash != std::string::npos) {
@@ -191,9 +191,9 @@ private:
         std::ostringstream contents;
         std::string line;
         while (std::getline(file, line)) {
-            // Jednoduchý parser pro #include "cesta_k_souboru"
+            // Simple parser for #include "path/to/file"
             size_t includePos = line.find("#include");
-            // Provedeme pouze, pokud radek neobsahuje komentar pred includem
+            // Execute only if the line does not contain a comment before the include
             if (includePos != std::string::npos && line.find("//") > includePos) {
                 size_t firstQuote = line.find('\"', includePos);
                 size_t secondQuote = line.find('\"', firstQuote + 1);
@@ -203,9 +203,9 @@ private:
                     
                     std::string includedContent = fileReader(fullIncludePath.c_str());
                     if (includedContent.empty()) {
-                        spdlog::warn("VAROVANI: Vkladany soubor je prazdny nebo nebyl nacten: {}", fullIncludePath);
+                        spdlog::warn("WARNING: Included file is empty or was not loaded: {}", fullIncludePath);
                     }
-                    // Rekurzivní volání pro vložení obsahu
+                    // Recursive call to insert content
                     contents << includedContent << "\n";
                     continue;
                 }

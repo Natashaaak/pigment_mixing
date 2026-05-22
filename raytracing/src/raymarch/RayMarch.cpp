@@ -30,7 +30,7 @@ RayMarch::RayMarch(MPMIntegrationSim *mpm, AABBc *a) {
     lightIntensities.push_back(0.5f);
 
 
-    spatulaMesh = new SpatulaMesh("data/spatula_handler.obj"); // Nebo "../data/spatula_handler.obj" v závislosti na pracovním adresáři
+    spatulaMesh = new SpatulaMesh("data/spatula_handler.obj");
 }
 
 RayMarch::~RayMarch() {
@@ -206,11 +206,11 @@ void RayMarch::initSkybox() {
 void RayMarch::renderSkybox(Camera* camera) {
     if (!hdrTexture) return;
     
-    // Zkreslíme skybox za všemi ostatními prvky
+    // Render the skybox behind all other elements
     glDepthFunc(GL_LEQUAL); 
     skyboxShader->use();
 
-    // Odstraníme translaci z matice pohledu, aby se kamera mohla jen otáčet a neutíkala ven z boxu
+    // Remove translation from the view matrix so the camera only rotates and doesn't move out of the box
     glm::mat4 view = glm::mat4(glm::mat3(camera->getView())); 
     skyboxShader->setUniform("view", view);
     skyboxShader->setUniform("projection", camera->getProj());
@@ -229,7 +229,7 @@ void RayMarch::renderSkybox(Camera* camera) {
 void RayMarch::generateBRDFLUT() {
     glGenTextures(1, &brdfLUTTexture);
     glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
-    // Používáme RG formát, protože ukládáme jen parametry A a B (scale a bias pro Fresnel)
+    // We use RG format because we only store parameters A and B (scale and bias for Fresnel)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, 512, 512, 0, GL_RG, GL_FLOAT, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -249,7 +249,7 @@ void RayMarch::generateBRDFLUT() {
     glGetIntegerv(GL_VIEWPORT, last_viewport);
     glViewport(0, 0, 512, 512);
     
-    // Využijeme stejný vertex shader pro full-screen quad jako při běžném vykreslování textury
+    // Use the same vertex shader for the full-screen quad as for regular texture rendering
     Shader brdfShader("../shaders/raymarching/shader.vert", "../shaders/raymarching/brdf.frag");
     brdfShader.use();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -366,14 +366,14 @@ void RayMarch::bindSpheres(MPMIntegrationSim *mpm) {
 }
 
 void RayMarch::renderTex(Camera* camera) {
-    // Aktivujeme Alpha Blending, aby byl raymarched objekt vidět nad skyboxem
+    // Enable Alpha Blending so the raymarched object is visible over the skybox
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    // ZMĚNA: Zapneme zápis do depth bufferu pro následnou kompozici meshe
+    // Enable depth buffer writing for subsequent mesh composition
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
-    glDepthFunc(GL_ALWAYS); // Vždy přepíšeme hodnoty (raymarching je první v pořadí nad pozadím)
+    glDepthFunc(GL_ALWAYS); // Always overwrite the values (raymarching is first in order above the background)
 
     texShader->use();
 
@@ -381,12 +381,12 @@ void RayMarch::renderTex(Camera* camera) {
     glBindTexture(GL_TEXTURE_2D, state.fullRender ? postProcessTex : outputTex);
     texShader->setUniform("renderedImage", 0);
 
-    // Předáme normalDepthTex, aby si frag shader mohl přečíst pozici a spočítat gl_FragDepth
+    // Pass normalDepthTex so the frag shader can read the position and calculate gl_FragDepth
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, normalDepthTex);
     texShader->setUniform("normalDepthTex", 1);
 
-    // Matice potřebné pro computeDepth()
+    // Matrices needed for computeDepth()
     texShader->setUniform("view", camera->getView());
     texShader->setUniform("proj", camera->getProj());
 
@@ -397,7 +397,7 @@ void RayMarch::renderTex(Camera* camera) {
     glBindVertexArray(0);
 
     glDisable(GL_BLEND);
-    glDepthFunc(GL_LESS); // Vrátíme zpět na klasické testování hloubky
+    glDepthFunc(GL_LESS); // Revert to standard depth testing
 }
 
 
@@ -438,21 +438,21 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
 
     depthMaps->bindDepthMaps(2, shader);
 
-    // Bindneme HDR mapu na volny slot 5
+    // Bind the HDR map to a free slot 5
     if (hdrTexture) {
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_CUBE_MAP, hdrTexture);
         shader->setUniform("hdrMap", 5);
     }
     
-    // Bindneme Irradiance mapu na slot 6
+    // Bind the Irradiance map to slot 6
     if (irradianceTexture) {
         glActiveTexture(GL_TEXTURE6);
         glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceTexture);
         shader->setUniform("irradianceMap", 6);
     }
 
-    // Bindneme BRDF integrační texturu na slot 7
+    // Bind the BRDF integration texture to slot 7
     if (brdfLUTTexture) {
         glActiveTexture(GL_TEXTURE7);
         glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
@@ -558,13 +558,13 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
         renderSkybox(camera);
     }
     
-    renderTex(camera);            // Krok 1: Vykreslí plochu a nastaví gl_FragDepth
+    renderTex(camera);            // Step 1: Render the quad and set gl_FragDepth
     if (mpm->spatulaExists() && spatulaMesh) {
-        // Aktivujeme shader pro špachtli PŘED nastavením textur a uniformů.
-        // Tím zajistíme, že se všechny následující operace vztahují na správný shader program.
+        // Activate the spatula shader BEFORE setting textures and uniforms.
+        // This ensures that all subsequent operations apply to the correct shader program.
         spatulaShader->use();
 
-        // Nastavení uniformů, které byly dříve v SpatulaMesh::render
+        // Set uniforms that were previously in SpatulaMesh::render
         spatulaShader->setUniform("invSpatulaTransform", mpm->getSpatulaInvTransform());
         spatulaShader->setUniform("view", camera->getView());
         spatulaShader->setUniform("projection", camera->getProj());
@@ -574,13 +574,13 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
         spatulaShader->setUniform("numLights", (int)lightDirs.size());
         spatulaShader->setUniform("lightDirs", lightDirs);
         spatulaShader->setUniform("lightColors", finalLightColors);
-        // Navážeme PBR textury, které jsou potřeba pro IBL (Image-Based Lighting).
-        // Bez nich by `texture(irradianceMap, ...)` vracelo černou barvu, což způsobuje černé odlesky.
+        // Bind PBR textures needed for IBL (Image-Based Lighting).
+        // Without them, `texture(irradianceMap, ...)` would return black, causing black reflections.
         if (hdrTexture) { glActiveTexture(GL_TEXTURE5); glBindTexture(GL_TEXTURE_CUBE_MAP, hdrTexture); spatulaShader->setUniform("hdrMap", 5); }
         if (irradianceTexture) { glActiveTexture(GL_TEXTURE6); glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceTexture); spatulaShader->setUniform("irradianceMap", 6); }
         if (brdfLUTTexture) { glActiveTexture(GL_TEXTURE7); glBindTexture(GL_TEXTURE_2D, brdfLUTTexture); spatulaShader->setUniform("brdfLUT", 7); }
 
-        // Nastavení materiálů jako pole (0: metal, 1: wood)
+        // Set materials as an array (0: metal, 1: wood)
         spatulaShader->setUniform("spatulaMaterials[0].albedo", spatulaMetal.albedo);
         spatulaShader->setUniform("spatulaMaterials[0].metallic", spatulaMetal.metallic);
         spatulaShader->setUniform("spatulaMaterials[0].roughness", spatulaMetal.roughness);
@@ -588,8 +588,8 @@ void RayMarch::march(GLint ww, GLint wh, MPMIntegrationSim *mpm, Camera *camera)
         spatulaShader->setUniform("spatulaMaterials[1].metallic", spatulaWood.metallic);
         spatulaShader->setUniform("spatulaMaterials[1].roughness", spatulaWood.roughness);
         
-        // Před renderováním meshe špachtle musíme shaderu předat materiál podlahy,
-        // protože pbr_lighting.glsl ho vyžaduje pro správné odrazy.
+        // Before rendering the spatula mesh, we must pass the floor material to the shader,
+        // because pbr_lighting.glsl requires it for correct reflections.
         spatulaShader->setUniform("floorMat.albedo", floorMat.albedo);
         spatulaShader->setUniform("floorMat.metallic", floorMat.metallic);
         spatulaShader->setUniform("floorMat.roughness", floorMat.roughness);

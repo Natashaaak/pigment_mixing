@@ -16,22 +16,22 @@ void main() {
 
     vec4 centerData = imageLoad(inTex, pix);
     
-    // Ošetření pozadí
-    if (centerData.a < -1.5) { // Preview pozadí
+    // Handle background
+    if (centerData.a < -1.5) { // Background preview
         imageStore(outTex, pix, vec4(centerData.rgb, isFinalPass ? 1.0 : centerData.a));
         return;
     }
-    if (centerData.a < -0.5) { // Transparentní pozadí pro skybox
+    if (centerData.a < -0.5) { // Transparent background for skybox
         imageStore(outTex, pix, vec4(centerData.rgb, isFinalPass ? 0.0 : centerData.a));
         return;
     }
-    // Pevné objekty (tekutina a špachtle) - propustí původní barvu bez rozmazání
+    // Solid objects (fluid, spatula) - pass through original color without blur
     if (centerData.a > 1.5) {
         imageStore(outTex, pix, vec4(centerData.rgb, isFinalPass ? 1.0 : centerData.a));
         return;
     }
 
-    // Jsme na podložce (Alpha obsahuje hodnotu stínu mezi [0, 1])
+    // We are on the floor (Alpha contains shadow value between [0, 1])
     vec4 centerND = imageLoad(normalDepthTex, pix);
     vec3 centerNormal = centerND.xyz;
     float centerDepth = centerND.w;
@@ -39,18 +39,18 @@ void main() {
     vec3 resultColor = vec3(0.0);
     float sumWeights = 0.0;
     
-    // Parametry filtru
-    float sigmaSpatial = 12.0; // Zvětšeno pro silnější rozmazání (zkuste hodnoty 10.0 - 15.0)
+    // Filter parameters
+    float sigmaSpatial = 12.0; // Increased for a stronger blur
     float sigmaDepth = 1.0;
     float sigmaNormal = 0.1;
-    int radius = 10; // Zvětšení prohledávané oblasti na 21x21 kernel
+    int radius = 10; // Increased search area to a 21x21 kernel
     
     for (int i = -radius; i <= radius; ++i) {
             ivec2 offset = blurDirection * i;
             ivec2 samplePix = clamp(pix + offset, ivec2(0), ivec2(width - 1, height - 1));
             vec4 sampleData = imageLoad(inTex, samplePix);
             
-            // Nabereme vzorek pouze pokud se jedná o stejný objekt (podložku)
+            // Only take a sample if it's the same object (the floor)
             if (sampleData.a < 0.0 || sampleData.a > 1.5) continue;
             
             vec4 sampleND = imageLoad(normalDepthTex, samplePix);

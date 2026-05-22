@@ -22,29 +22,29 @@ void main() {
 
     vec3 color;
     if (fullRender) {
-        // Jednoduchý self-shadowing. Protože je špachtle vždy nahoře,
-        // stačí zkontrolovat, zda normála směřuje ke světlu.
+        // Simple self-shadowing. Since the spatula is always on top,
+        // we just need to check if the normal is pointing towards the light.
         float shadows[MAX_LIGHTS];
         for (int i = 0; i < numLights; ++i) {
             shadows[i] = step(0.0, dot(N, lightDirs[i])); // 1.0 if lit, 0.0 if in self-shadow
         }
         vec3 lit_color = computePBRLighting(mat, floorMat, WorldPos, N, V, shadows);
 
-        // Stíny z přímého osvětlení jsou aplikovány uvnitř computePBRLighting.
-        // Problém je, že nepřímé osvětlení (odrazy od oblohy) stále plně osvětluje i odvrácenou stranu,
-        // což na lesklém materiálu vypadá, jako by stíny neexistovaly.
-        // Pro tmavší a realističtější stíny musíme ztmavit i toto nepřímé (ambientní) osvětlení.
-        // Následující kód je aproximace ambientní okluze (AO) založená na self-shadowingu.
+        // Shadows from direct lighting are applied inside computePBRLighting.
+        // The problem is that indirect lighting (reflections from the sky) still fully illuminates the back side,
+        // which on a glossy material makes it look as if shadows don't exist.
+        // For darker and more realistic shadows, we must also darken this indirect (ambient) lighting.
+        // The following code is an approximation of ambient occlusion (AO) based on self-shadowing.
 
-        // Vypočítáme "míru osvětlení" z přímých světel s měkkým přechodem.
-        // 1.0 = plně osvětleno, 0.0 = v plném stínu.
+        // We calculate a "lighting amount" from direct lights with a soft transition.
+        // 1.0 = fully lit, 0.0 = in full shadow.
         float max_light_dot = 0.0;
         for (int i = 0; i < numLights; ++i) {
             max_light_dot = max(max_light_dot, dot(N, lightDirs[i]));
         }
         float light_amount = smoothstep(0.0, 0.15, max_light_dot);
 
-        // Aplikujeme ztmavení na finální barvu. mix(0.2, 1.0, ...) znamená, že v plném stínu bude výsledná barva mít jen 20% původního jasu.
+        // Apply darkening to the final color. mix(0.2, 1.0, ...) means that in full shadow, the resulting color will only have 20% of its original brightness.
         color = lit_color * mix(0.2, 1.0, light_amount);
     } else {
         vec3 irradiance = texture(irradianceMap, N).rgb;

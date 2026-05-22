@@ -21,19 +21,19 @@ void BinaryDensityGrid::createVectors(AABBc *a, MPMIntegrationSim *mpm) {
 
 void BinaryDensityGrid::fillCells(MPMIntegrationSim *mpm, AABBc *a) {
     const auto &spheresData = mpm->getParticles();
-    std::vector<glm::uvec2>(cells.size(), {0, 0}).swap(cells); //setting to zero
+    std::vector<glm::uvec2>(cells.size(), {0, 0}).swap(cells); // set to zero
     #pragma omp parallel for schedule(static)
-    for (int i = 0; i < mpm->getParticleAmount(); ++i) { //counting particles in each cell
+    for (int i = 0; i < mpm->getParticleAmount(); ++i) { // count particles in each cell
         glm::vec3 cell = glm::floor((glm::vec3(spheresData[i]) - a->gridStart) / a->voxelS);
 
         if (cell.x < 0 || cell.y < 0 || cell.z < 0 || cell.x >= a->cellsX || cell.y >= a->cellsY || cell.z >= a->cellsZ)
-            continue; //checking boundaries
+            continue; // check boundaries
 
-        unsigned id = cell.x + a->cellsX * (cell.z * a->cellsY + cell.y); //finding according cell
+        unsigned id = cell.x + a->cellsX * (cell.z * a->cellsY + cell.y); // find corresponding cell
         #pragma omp atomic
         cells[id].x++;
     }
-    //counting offsets
+    // count offsets
     for (int i = 1; i < cells.size(); ++i) {
         cells[i].y += cells[i-1].x + cells[i-1].y;
     }
@@ -42,8 +42,8 @@ void BinaryDensityGrid::fillCells(MPMIntegrationSim *mpm, AABBc *a) {
     for (int i = 0; i < mpm->getParticleAmount(); ++i) {
         glm::vec3 cell = glm::floor((glm::vec3(spheresData[i]) - a->gridStart) / a->voxelS);
         if (cell.x < 0 || cell.y < 0 || cell.z < 0 || cell.x >= a->cellsX || cell.y >= a->cellsY || cell.z >= a->cellsZ)
-            continue; //checking boundaries
-        unsigned id = cell.x + a->cellsX * (cell.z * a->cellsY + cell.y); //finding according cell
+            continue; // check boundaries
+        unsigned id = cell.x + a->cellsX * (cell.z * a->cellsY + cell.y); // find corresponding cell
         unsigned local_appeared;
         #pragma omp atomic capture
         {
@@ -53,49 +53,6 @@ void BinaryDensityGrid::fillCells(MPMIntegrationSim *mpm, AABBc *a) {
         unsigned index = cells[id].y + local_appeared;
         ids[index] = i;
     }
-
-    // --- Calculate and print Average PPC for BDG and MPM Grids ---
-    // unsigned int bdg_filled = 0;
-    // unsigned int bdg_total = 0;
-    // unsigned int mpm_filled = 0;
-    // unsigned int mpm_total = 0;
-
-    // float mpm_dx = a->voxelS * 0.5f;
-
-    // #pragma omp parallel for schedule(static) reduction(+:bdg_filled, bdg_total, mpm_filled, mpm_total)
-    // for (int i = 0; i < (int)cells.size(); ++i) {
-    //     unsigned int count = cells[i].x;
-    //     unsigned int offset = cells[i].y;
-    //     if (count > 0) {
-    //         bdg_filled++;
-    //         bdg_total += count;
-
-    //         unsigned int sub_cell_mask = 0;
-    //         for (unsigned int j = 0; j < count; ++j) {
-    //             unsigned int pid = ids[offset + j];
-    //             glm::vec3 pos = glm::vec3(spheresData[pid]);
-    //             glm::vec3 mpm_cell = glm::floor((pos - a->gridStart) / mpm_dx);
-                
-    //             int sub_x = (int)mpm_cell.x & 1;
-    //             int sub_y = (int)mpm_cell.y & 1;
-    //             int sub_z = (int)mpm_cell.z & 1;
-    //             int bit = sub_x | (sub_y << 1) | (sub_z << 2);
-    //             sub_cell_mask |= (1 << bit);
-    //         }
-            
-    //         int bits_set = 0;
-    //         for (int b = sub_cell_mask; b > 0; b >>= 1) {
-    //             bits_set += b & 1;
-    //         }
-    //         mpm_filled += bits_set;
-    //         mpm_total += count;
-    //     }
-    // }
-
-    // float avg_bdg_ppc = bdg_filled > 0 ? (float)bdg_total / bdg_filled : 0.0f;
-    // float avg_mpm_ppc = mpm_filled > 0 ? (float)mpm_total / mpm_filled : 0.0f;
-
-    // debug("Average PPC - BDG Grid: {", avg_bdg_ppc,"}, MPM Grid: {", avg_mpm_ppc, "}");
 }
 
 void BinaryDensityGrid::generateNc(AABBc *a, std::vector<float> &nc) {
@@ -194,7 +151,7 @@ static float mixboxDistance(const std::array<float, 7>& a, const std::array<floa
 }
 
 void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const std::vector<glm::mat4>& ani_matrices) {
-    // 1. Vyčistit mřížku (8 floatů na voxel: 7 pro latent, 1 pro váhu)
+    // 1. Clear the grid (8 floats per voxel: 7 for latent, 1 for weight)
     std::fill(gridPigments.begin(), gridPigments.end(), 0.0f);
 
     const auto& particles_pos = mpm->getParticles(); // spheresData
@@ -205,7 +162,7 @@ void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const s
     size_t pigY = a->cellsY * 4;
     size_t pigZ = a->cellsZ * 4;
 
-    float sigma_color = state.sigma_color; // Práh citlivosti (laditelný parametr)
+    float sigma_color = state.sigma_color; // Sensitivity threshold (tunable parameter)
     
     // FIX 1: Do not multiply by voxelS! The anisotropic matrix G inherently scales the physical 
     // difference into a normalized space where 1.0 is the boundary.
@@ -265,9 +222,9 @@ void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const s
         if (w > 0.0f) {
             for (int c = 0; c < 7; ++c) tempGrid[i + c] /= w;
 
-            // Normalizace pigmentů pro robustnost
+            // Normalize pigments for robustness
             float pigment_sum = tempGrid[i] + tempGrid[i+1] + tempGrid[i+2] + tempGrid[i+3];
-            // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+            // Since we are working only with opaque pigments, their sum should always be 1.
             if (pigment_sum > 1e-6f) {
                 for (int c = 0; c < 4; ++c) tempGrid[i + c] /= pigment_sum;
             }
@@ -294,8 +251,7 @@ void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const s
                     std::array<float, 7> v_pig;
                     for (int c = 0; c < 7; ++c) v_pig[c] = tempGrid[idx + c]; // Access C_voxel from Pass 1
                     
-                    // Získání aktuální barvy ve voxelu pro porovnání (pokud už tam nějaká je)
-                    // Re-calculate Spatial Weight
+                    // Get the current color in the voxel for comparison (if any already exists)
                     glm::vec3 voxelCenter = a->gridStart + (glm::vec3(cell) + 0.5f) * voxelS;
                     glm::vec3 diff = pos - voxelCenter;
                     
@@ -312,7 +268,7 @@ void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const s
                     float colorDist = mixboxDistance(p_pig, v_pig);
                     float w_total = w_spatial * std::exp(-(colorDist * colorDist) / (sigma_color * sigma_color));
 
-                    // Akumulace
+                    // Accumulation
                     for (int c = 0; c < 7; ++c) {
                         gridPigments[idx + c] += p_pig[c] * w_total;
                     }
@@ -322,15 +278,15 @@ void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const s
         }
     }
 
-    // Normalizace: Vydělit barvy součtem vah
+    // Normalization: Divide colors by the sum of weights
     for (size_t i = 0; i < gridPigments.size(); i += 8) {
         float w = gridPigments[i + 7];
         if (w > 0.0f) {
             for (int c = 0; c < 7; ++c) gridPigments[i + c] /= w;
 
-            // Finální normalizace pigmentů před odesláním do shaderu
+            // Final normalization of pigments before sending to the shader
             float pigment_sum = gridPigments[i] + gridPigments[i+1] + gridPigments[i+2] + gridPigments[i+3];
-            // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+            // Since we are working only with opaque pigments, their sum should always be 1.
             if (pigment_sum > 1e-6f) {
                 for (int c = 0; c < 4; ++c) gridPigments[i + c] /= pigment_sum;
             }
@@ -339,7 +295,7 @@ void BinaryDensityGrid::fillRenderGrid(MPMIntegrationSim *mpm, AABBc *a, const s
 }
 
 void BinaryDensityGrid::bindBuffers(unsigned start) {
-    //MSSBO: 0
+    // MSSBO: 0
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, MSSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER,
     M.size() * sizeof(unsigned),
@@ -350,7 +306,7 @@ void BinaryDensityGrid::bindBuffers(unsigned start) {
     M.data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start, MSSBO);
 
-    //cellsSSBO: 1
+    // cellsSSBO: 1
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, cellsSSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER,
     cells.size() * sizeof(glm::uvec2),
@@ -361,7 +317,7 @@ void BinaryDensityGrid::bindBuffers(unsigned start) {
     cells.data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start+1, cellsSSBO);
 
-    //idsSSBO: 2
+    // idsSSBO: 2
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, idsSSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER,
     ids.size() * sizeof(unsigned),
@@ -372,7 +328,7 @@ void BinaryDensityGrid::bindBuffers(unsigned start) {
     ids.data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start+2, idsSSBO);
 
-    //M2SSBO: 3
+    // M2SSBO: 3
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, M2SSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER,
     M2.size() * sizeof(unsigned),
@@ -383,7 +339,7 @@ void BinaryDensityGrid::bindBuffers(unsigned start) {
     M2.data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start+3, M2SSBO);
 
-    //M4SSBO: 4
+    // M4SSBO: 4
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, M4SSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER,
     M4.size() * sizeof(unsigned),
@@ -394,7 +350,7 @@ void BinaryDensityGrid::bindBuffers(unsigned start) {
     M4.data());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, start+4, M4SSBO);
 
-    //pigmentsSSBO: 5
+    // pigmentsSSBO: 5
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, pigmentsSSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER, gridPigments.size() * sizeof(float), gridPigments.data(), GL_STREAM_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, pigmentsSSBO);

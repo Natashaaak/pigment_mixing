@@ -254,7 +254,7 @@ inline T d2Ndu2(T u){
         const T dNy = dNdu(uy);
         const T dNz = dNdu(uz);
 
-        // Váha 3D
+        // Weight 3D
         data.first = Nx * Ny * Nz;
 
         // Gradient 3D
@@ -281,7 +281,7 @@ inline T d2Ndu2(T u){
     inline WeightData compute_w_and_grad(T xp, T yp, T xi, T yi, T one_over_h) {
         WeightData data;
         
-        // Pomocné proměnné pro ušetření volání funkcí
+        // Helper variables to save function calls
         const T ux = (xp - xi) * one_over_h;
         const T uy = (yp - yi) * one_over_h;
         
@@ -290,30 +290,15 @@ inline T d2Ndu2(T u){
         const T dNx = dNdu(ux);
         const T dNy = dNdu(uy);
 
-        // Výpočet váhy (součin bázových funkcí)
+        // Weight 2D
         data.first = Nx * Ny;
 
-        // Výpočet gradientu
+        // Gradient 2D
         data.second << dNx * Ny * one_over_h,
                     Nx * dNy * one_over_h;
 
         return data;
     }
-
-    // inline T wip(T xp, T yp, T xi, T yi, T one_over_h){
-    //     T Lx = 0.1;
-    //     return N( fmod(xp - xi, Lx) * one_over_h ) * N( (yp - yi) * one_over_h );
-    // }
-    // inline TV grad_wip(T xp, T yp, T xi, T yi, T one_over_h){
-    //     T Lx = 0.1;
-    //     T xpminxi = xp-xi;
-    //     if (xpminxi <= -Lx || xpminxi >= Lx)
-    //         xpminxi = -fmod(xpminxi, Lx);
-    //     TV out;
-    //     out << dNdu( xpminxi  * one_over_h) * N((yp - yi) * one_over_h) * one_over_h,
-    //            dNdu((yp - yi) * one_over_h) * N( xpminxi  * one_over_h) * one_over_h;
-    //     return out;
-    // }
 
     inline T laplace_wip(T xp, T yp, T xi, T yi, T one_over_h, T one_over_h_square){
         T term1 = d2Ndu2((xp - xi) * one_over_h) * N((yp - yi) * one_over_h);

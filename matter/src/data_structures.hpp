@@ -74,14 +74,14 @@ public:
 
 struct ParticleNeighborhood {
     unsigned int base_index[3]; // i_base, j_base, k_base
-    T weights[64];              // Hodnoty wip (4x4x4 pro 3D)
-    TV grads[64];                // Hodnoty grad_wip
+    T weights[64];              // wip values (4x4x4 for 3D)
+    TV grads[64];               // grad_wip values
 };
 
 struct BlobModel {
     std::string path;
     float volume;
-    float calibration_factor; // Faktor pro převod mezi objemem a parametrem t
+    float calibration_factor; // Factor for converting between volume and parameter t
 };
 
 #endif // DATA_STRUCTURES_HPP

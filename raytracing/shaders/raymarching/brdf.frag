@@ -3,7 +3,7 @@ out vec2 FragColor;
 
 const float PI = 3.14159265359;
 
-// Získání hodnoty sekvence s nízkou diskrepancí (Van der Corput)
+// Get a value from the low-discrepancy Van der Corput sequence
 float RadicalInverse_VdC(uint bits) {
     bits = (bits << 16u) | (bits >> 16u);
     bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
@@ -38,7 +38,7 @@ vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness) {
 
 float GeometrySchlickGGX(float NdotV, float roughness) {
     float a = roughness;
-    float k = (a * a) / 2.0; // Pozor: pro IBL se používá toto k! (nikoliv (a+1)^2 / 8)
+    float k = (a * a) / 2.0; // Note: for IBL, this k is used! (not (a+1)^2 / 8)
     float nom   = NdotV;
     float denom = NdotV * (1.0 - k) + k;
     return nom / denom;

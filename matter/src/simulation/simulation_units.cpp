@@ -196,13 +196,6 @@ void Simulation::prepareSimulation(){
         }
     }
 
-    // debug("Number of particles: ", Np);
-    // debug("Grid spacing dx:     ", dx);
-    // debug("Elastic wave speed:  ", wave_speed);
-    // debug("Maximum dt:          ", dt_max);
-    // debug("Particle volume:     ", particle_volume);
-    // debug("Particle mass:       ", particle_mass);
-
     // initialiye grid and boundaries solely for the purpose of first frame for raytracing
     if (pbc){
         if (current_time_step == 0)
@@ -237,16 +230,6 @@ void Simulation::step(){
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     runtime_total += std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-    
-    // T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
-    // std::cout << "Frame: "               << frame              << std::endl;
-    // std::cout << "               Time: " << time   << " -> "   << (frame+1)*frame_dt << std::endl;
-    // std::cout << "Simulation took " << runtime_total / steps << " milliseconds on average per step";
-    
-    // debug("Runtime P2G     = ", (runtime_p2g     * 1000.0) / steps, " milliseconds");
-    // debug("Runtime G2P     = ", (runtime_g2p     * 1000.0) / steps, " milliseconds");
-    // debug("Runtime Euler   = ", (runtime_euler   * 1000.0) / steps, " milliseconds");
-    // debug("Runtime DefGrad = ", (runtime_defgrad * 1000.0) / steps, " milliseconds");
 }
 
 bool Simulation::frameFinished(){

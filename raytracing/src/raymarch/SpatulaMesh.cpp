@@ -20,7 +20,7 @@ void SpatulaMesh::loadOBJ(const std::string& path) {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    // Získání složky ze zadané cesty, aby tinyobjloader našel případný .mtl soubor
+    // Get the directory from the specified path so tinyobjloader can find a possible .mtl file
     std::string base_dir = "";
     size_t pos = path.find_last_of("/\\");
     if (pos != std::string::npos) {
@@ -51,7 +51,7 @@ void SpatulaMesh::loadOBJ(const std::string& path) {
         size_t index_offset = 0;
         for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
             int fv = shapes[s].mesh.num_face_vertices[f];
-            if (fv != 3) { // Podporujeme pouze trojúhelníky
+            if (fv != 3) { // We only support triangles
                 index_offset += fv;
                 continue;
             }

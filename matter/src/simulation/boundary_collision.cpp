@@ -11,9 +11,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
 
     bool influenced_by_spatula = false;
 
-    // --- PŘEDSTIŽNÁ DETEKCE ŠPACHTLE ---
-    // Vytvoříme detekční zónu (např. 2 * dx) kolem špachtle.
-    // Pokud je částice (uzel) v této zóně, nastavíme influenced_by_spatula = true.
+    // --- PREDICTIVE SPATULA DETECTION ---
+    // Create a detection zone (e.g., 2 * dx) around the spatula.
+    // If a particle (node) is in this zone, set influenced_by_spatula = true.
     if (spatula_ptr != nullptr) {
         Eigen::Vector4f worldPos;
 #ifdef THREEDIM
@@ -89,23 +89,23 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
 
             vi = v_rel + v_obj;
 
-            // Zaznamenáme, že špachtle ovlivnila částici a má tak přednost
+            // We record that the spatula has influenced the particle and thus has priority
             if (obj.get() == spatula_ptr) {
                 influenced_by_spatula = true;
 
-                // Pokud je částice v kritické zóně u dna (hrozí film)
+                // If the particle is in a critical zone near the bottom (risk of creating a thin film)
                 if (Xi(1) < 0.8 * dx) {
                     TV n = obj->normal(Xi);
                     
-                    // Univerzální výpočet tečného vektoru směřujícího NAHORU (pro 2D i 3D)
+                    // Universal calculation of the tangent vector pointing UP (for 2D and 3D)
                     TV up = TV::Zero();
-                    up(1) = 1.0; // Globální směr nahoru
-                    TV t = up - up.dot(n) * n; // Projekce osy Y do tečné roviny
+                    up(1) = 1.0; // Global up direction
+                    TV t = up - up.dot(n) * n; // Projection of the Y-axis onto the tangent plane
                     if (t.norm() > 1e-6) t.normalize();
-                    else t = TV::Zero(); // Pro jistotu, kdyby byla normála přesně (0,1,0)
+                    else t = TV::Zero(); // Just in case the normal is exactly (0,1,0)
 
-                    // Rychlost: rychlost špachtle + "skluz" směrem nahoru
-                    // 0.2 * v_obj.norm() určí, jak ochotně barva po špachtli klouže
+                    // Velocity: spatula velocity + "slip" upwards
+                    // 0.2 * v_obj.norm() determines how readily the paint slides on the spatula
                     vi = v_obj + t * (0.2 * v_obj.norm());
                 }
             }
@@ -123,8 +123,8 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
     for (auto& obj : plates) {
         bool colliding = obj->inside(Xi);
         if (colliding) {
-            // Špachtle má PŘEDNOST: pokud částice koliduje se špachtlí, ignorujeme tření podložky (aby po ní barva klouzala),
-            // ale musíme zabránit propadnutí částic dolů skrz dno.
+            // SPATULA HAS PRIORITY: if a particle collides with the spatula, we ignore the floor friction (so the paint slides on it),
+            // but we must prevent particles from falling through the bottom.
             if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
                 if (vi(1) < obj->vy_object) {
                     vi(1) = obj->vy_object;
@@ -322,8 +322,8 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
     for (auto& obj : plates) {
         bool colliding = obj->inside(Xi);
         if (colliding) {
-            // Špachtle má PŘEDNOST: pokud částice koliduje se špachtlí, ignorujeme tření podložky,
-            // ale musíme zabránit propadnutí částic dolů.
+            // SPATULA HAS PRIORITY: if a particle collides with the spatula, we ignore the floor friction,
+            // but we must prevent particles from falling through.
             if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
                 if (vi(1) < obj->vy_object) {
                     vi(1) = obj->vy_object;

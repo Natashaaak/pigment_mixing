@@ -36,15 +36,15 @@ public:
         }
     }
 
-    // Pomocná SDF funkce (vzdálenost k povrchu v lokálním prostoru)
+    // Helper SDF function (distance to surface in local space)
     T sdSpatula(const Eigen::Vector3f& p) const {
-        // Půl-rozměry lichoběžníku
+        // Half-dimensions of the trapezoid
         Eigen::Vector2f p2d(std::abs(p.x()), p.z());
-        float b1 = (float)(halfWidth + offset);       // Spodní šířka
-        float b2 = (float)(halfWidth + offset) * 0.25f; // Horní šířka
-        float he = (float)(halfLength + offset);       // Polovina výšky (Z)
+        float b1 = (float)(halfWidth + offset);       // Bottom width
+        float b2 = (float)(halfWidth + offset) * 0.25f; // Top width
+        float he = (float)(halfLength + offset);       // Half height (Z)
 
-        // 1. Výpočet 2D SDF pro tělo lichoběžníku (mezi -he a +he)
+        // 1. Calculate 2D SDF for the trapezoid body (between -he and +he)
         Eigen::Vector2f p1(b1, -he);
         Eigen::Vector2f p2(b2, he);
         Eigen::Vector2f ba = p2 - p1;
@@ -55,13 +55,13 @@ public:
         float d_inside = p2d.x() - inside_x;
         float d_2d = (p2d.x() < inside_x) ? d_inside : d_side;
 
-        // 2. Přepsání d_2d pro oblasti nad a pod tělem (zakulacené konce)
+        // 2. Overwrite d_2d for areas above and below the body (rounded ends)
         if (p2d.y() > he) {
-            // Oblast půlkruhu: vzdálenost k bodu (0, he) minus poloměr b2
+            // Semicircle area: distance to point (0, he) minus radius b2
             d_2d = std::sqrt(p2d.x() * p2d.x() + (p2d.y() - he) * (p2d.y() - he)) - b2;
         } else if (p2d.y() < -he) {
             float r_x = (float)(halfWidth + offset);        // b1
-            float r_z = 1.5f * (float)(halfWidth + offset); // Sjednoceno se shaderem (1.5 * b1)
+            float r_z = 1.5f * (float)(halfWidth + offset); // Unified with the shader (1.5 * b1)
             Eigen::Vector2f p_rel(p2d.x(), p2d.y() + he);
             Eigen::Vector2f r(r_x, r_z);
             float k0 = (p_rel.array() / r.array()).matrix().norm();
@@ -69,7 +69,7 @@ public:
             d_2d = k0 * (k0 - 1.0f) / k1;
         }
 
-        // 3. Korektní 3D extruze (Tloušťka v ose Y) pro sphere tracing
+        // 3. Correct 3D extrusion (Thickness in Y-axis) for sphere tracing
         float d_y = std::abs(p.y()) - (float)halfThickness;
         Eigen::Vector2f w(d_2d, d_y);
         
@@ -83,12 +83,12 @@ public:
 
     bool inside(const TV& X_in) const override {
 
-        // Definujeme 3D vektor se správným typem T (např. float)
+        // Define a 3D vector with the correct type T (e.g., float)
         Eigen::Vector4f worldPos;
 #ifdef THREEDIM
         worldPos << (float)X_in(0), (float)X_in(1), (float)X_in(2), 1.0f;
 #else
-        worldPos << (float)X_in(0), 0.0f, (float)X_in(1), 1.0f; // 2D X a Z
+        worldPos << (float)X_in(0), 0.0f, (float)X_in(1), 1.0f; // 2D X and Z
 #endif
 
         Eigen::Vector3f localPos = (invTransform.matrix() * worldPos).head<3>();
@@ -106,7 +106,7 @@ public:
 
         Eigen::Vector3f p = (invTransform * worldPos).head<3>();
 
-        // Numerický gradient (centrální diference)
+        // Numerical gradient (central differences)
         T e = (T)0.0001;
         Eigen::Matrix<T, 3, 1> n_local;
         n_local << 
@@ -116,14 +116,14 @@ public:
         
         n_local.normalize();
 
-        // Transformace normály zpět do world space (pouze rotace)
+        // Transform normal back to world space (rotation only)
         // worldNormal = (ModelMatrix^-1)^T * localNormal
         TV worldNormal3d = (transform.linear().inverse().transpose() * n_local).normalized();
 
     #ifdef THREEDIM
         return worldNormal3d;
     #else
-        // Ve 2D vracíme osy X a Z (odpovídající vaší simulaci)
+        // In 2D, return X and Z axes (corresponding to your simulation)
         return TV(worldNormal3d(0), worldNormal3d(2));
     #endif
     }
@@ -134,7 +134,7 @@ public:
     }
 
     TV velocity(const TV& X_in) const override {
-        // 1. Translační složka (lineární posun)
+        // 1. Translational component (linear shift)
         TV v_total = TV::Zero();
         v_total(0) = vx_object;
         v_total(1) = vy_object;
@@ -142,17 +142,17 @@ public:
         v_total(2) = vz_object;
 #endif
 
-        // 2. Rotační složka
-        // Střed špachtle ve světových souřadnicích (sloupec 3 v matici 4x4)
+        // 2. Rotational component
+        // Spatula center in world coordinates (column 3 of the 4x4 matrix)
         TV center = transform.translation(); 
-        TV r = X_in - center; // Vektor od středu k bodu kolize
+        TV r = X_in - center; // Vector from the center to the collision point
 
 #ifdef THREEDIM
         // v_rot = omega x r
         TV v_rot = angularVelocity.cross(r);
         v_total += v_rot;
 #else
-        // Ve 2D je rotace jen skalár (kolem osy kolmé k rovině)
+        // In 2D, rotation is just a scalar (around the axis perpendicular to the plane)
         // v_rot = (-omega * r.y, omega * r.x)
         TV v_rot;
         v_rot << -angularVelocity2D * r(1), angularVelocity2D * r(0);
@@ -162,8 +162,7 @@ public:
     }
 
     void move(T dt) {
-        // 1. Výpočet aktuálního času simulace
-        // Předpokládáme, že si ve třídě držíš proměnnou 'currentTime', kterou inkrementuješ
+        // 1. Calculate the current simulation time
         currentTime += dt;
 
         if (animation_data.empty()) {
@@ -188,22 +187,22 @@ public:
 
         float t = floatIndex - (float)i0_unwrapped;
 
-        // 2. Načtení sousedních transformací
+        // 2. Load adjacent transformations
         const auto& f0 = animation_data[i0];
         const auto& f1 = animation_data[i1];
 
-        // 3. Interpolace pozice (Lerp)
+        // 3. Position interpolation (Lerp)
         Eigen::Vector3f p0(f0.pos[0], f0.pos[1], f0.pos[2]);
         Eigen::Vector3f p1(f1.pos[0], f1.pos[1], f1.pos[2]);
         Eigen::Vector3f p_interp = p0 + t * (p1 - p0);
 
-        // 4. Interpolace rotace (Slerp)
+        // 4. Rotation interpolation (Slerp)
         Eigen::Quaternionf q0(f0.quat[3], f0.quat[0], f0.quat[1], f0.quat[2]); // w, x, y, z
         Eigen::Quaternionf q1(f1.quat[3], f1.quat[0], f1.quat[1], f1.quat[2]);
         Eigen::Quaternionf q_interp = q0.slerp(t, q1);
 
-        // 5. AKTUALIZACE RYCHLOSTÍ (Klíčové pro MPM stabilitu)
-        // Rychlost v = (p_new - p_old) / dt
+        // 5. VELOCITY UPDATE (Key for MPM stability)
+        // Velocity v = (p_new - p_old) / dt
         Eigen::Vector3f oldPos = transform.translation().template cast<float>();
         Eigen::Vector3f velocity3f = (p_interp - oldPos) / (float)dt;
         
@@ -213,7 +212,7 @@ public:
         vz_object = (T)velocity3f.z();
     #endif
 
-        // Výpočet úhlové rychlosti (omega) z rozdílu kvaternionů
+        // Calculate angular velocity (omega) from the quaternion difference
         // dq = q1 * q0_inv -> omega = 2 * log(dq) / dt
         Eigen::Quaternionf dq = q_interp * Eigen::Quaternionf(transform.linear().template cast<float>()).conjugate();
         Eigen::AngleAxisf aa(dq);
@@ -222,10 +221,10 @@ public:
     #ifdef THREEDIM
         angularVelocity = omega.template cast<T>();
     #else
-        angularVelocity2D = (T)omega.y(); // V 2D simulaci osa rotace obvykle kolmá na rovinu
+        angularVelocity2D = (T)omega.y(); // In a 2D simulation, the axis of rotation is usually perpendicular to the plane
     #endif
 
-        // 6. FINÁLNÍ TRANSFORMAČNÍ MATICE
+        // 6. FINAL TRANSFORMATION MATRIX
         transform.setIdentity();
         transform.translate(p_interp.template cast<T>());
         transform.rotate(q_interp.template cast<T>());

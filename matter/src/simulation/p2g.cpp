@@ -102,10 +102,10 @@ void Simulation::P2G(){
             grid.pigments[l] /= mi;
             grid.shear_intensity[l] /= mi;
 
-            // Normalizace pigmentů na mřížce pro robustnost proti numerickým chybám.
-            // Tím zajistíme, že data přenášená zpět na částice v G2P kroku jsou také čistá.
+            // Normalize pigments on the grid for robustness against numerical errors.
+            // This ensures that the data transferred back to the particles in the G2P step is also clean.
             float pigment_sum = grid.pigments[l].head<4>().sum();
-            // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+            // Since we are working only with opaque pigments, their sum should always be 1.
             if (pigment_sum > 1e-6f) {
                 grid.pigments[l].head<4>() /= pigment_sum;
             }

@@ -20,7 +20,7 @@ void Simulation::blobs(const std::vector<float>& colorRatios, const std::vector<
     for (size_t i = 0; i < n; ++i) {
         float ratio = std::max(min_ratio, std::min(max_ratio, colorRatios[i]));
         float targetVolume = min_vol + (ratio - min_ratio) / (max_ratio - min_ratio) * (max_vol - min_vol);
-        targetVolume = std::max(min_vol, std::min(max_vol, targetVolume)); // Bezpečné ořezání
+        targetVolume = std::max(min_vol, std::min(max_vol, targetVolume)); 
         
         int idxA = getMorphPair(targetVolume);
         int idxB = idxA + 1;

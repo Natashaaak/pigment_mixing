@@ -23,7 +23,7 @@ void Simulation::positionUpdate(){
             }
         }
 
-        // Ochrana proti NaN a nekonečnu (pokud výpočet exploduje, NaN by ignorovalo limity a shodilo by to paměť rendereru)
+        // Protection against NaN and infinity (if the calculation explodes, NaN would ignore limits and crash the renderer's memory)
         bool is_invalid = false;
         for (unsigned int d = 0; d < dim; ++d) {
             if (std::isnan(particles.x[p](d)) || std::isinf(particles.x[p](d)) ||
@@ -51,8 +51,8 @@ void Simulation::positionUpdate(){
             }
         }
 
-        // Pojistka: částice nesmí propadnout pod podložku (tvrdý limit na y=0).
-        // Jistota pro případ, že numerická chyba při velkém stlačení posune částici dolů.
+        // Failsafe: particles must not fall through the floor (hard limit at y=0).
+        // A safeguard in case a numerical error during high compression pushes a particle down.
         if (particles.x[p](1) < 0.0) {
             particles.x[p](1) = 0.0;
             if (particles.v[p](1) < 0.0) {

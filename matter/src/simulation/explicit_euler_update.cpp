@@ -6,7 +6,7 @@
 
 void Simulation::explicitEulerUpdate(){
 
-    // Globální pole sil - vynulované
+    // Global force field - zeroed
     std::vector<TV> grid_force(grid_nodes, TV::Zero());
 
     #pragma omp parallel for num_threads(n_threads)
@@ -16,7 +16,6 @@ void Simulation::explicitEulerUpdate(){
         const auto &pn = p_neighbors[p];
         int count = 0;
 
-        // Výpočet stresu (Piola) zůstává stejný
         TM Fe = particles.F[p];
         TM dPsidF = (elastic_model == ElasticModel::NeoHookean) ? NeoHookeanPiola(Fe) : HenckyPiola(Fe);
         TM tau = dPsidF * Fe.transpose();
@@ -40,12 +39,11 @@ void Simulation::explicitEulerUpdate(){
                 }
                 #else
                 unsigned int index = ind(i, j);
-                const TV& grad = pn.grads[count++]; // Předvypočítaný gradient
+                const TV& grad = pn.grads[count++]; // Precomputed gradient
 
-                if (grid.mass[index] > 0){
-                    TV f_p = tau * grad; // Příspěvek síly od částice
-                    
-                    // Atomický zápis po složkách (zabrání race condition)
+                if (grid.mass[index] > 0){ // Force contribution from particle
+                    TV f_p = tau * grad; // Force contribution from particle
+                    // Atomic write by components (prevents race condition)
                     #pragma omp atomic
                     grid_force[index](0) += f_p(0);
                     #pragma omp atomic

@@ -9,7 +9,7 @@ uniform float roughness;
 const float PI = 3.14159265359;
 const uint SAMPLE_COUNT = 1024u;
 
-// Získání hodnoty sekvence s nízkou diskrepancí (Van der Corput)
+// Get a value from the low-discrepancy Van der Corput sequence
 float RadicalInverse_VdC(uint bits) {
     bits = (bits << 16u) | (bits >> 16u);
     bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
@@ -19,12 +19,12 @@ float RadicalInverse_VdC(uint bits) {
     return float(bits) * 2.3283064365386963e-10; // / 0x100000000
 }
 
-// Vygeneruje bod [x,y] na 2D ploše pomocí Hammersleyho sekvence
+// Generate a point [x,y] on a 2D plane using the Hammersley sequence
 vec2 Hammersley(uint i, uint N) {
     return vec2(float(i)/float(N), RadicalInverse_VdC(i));
 }
 
-// Převede náhodný 2D bod na konkrétní směr vektoru s použitím rozložení GGX
+// Convert a random 2D point to a specific vector direction using GGX distribution
 vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness) {
     float a = roughness * roughness;
     
@@ -32,13 +32,13 @@ vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness) {
     float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a*a - 1.0) * Xi.y));
     float sinTheta = sqrt(1.0 - cosTheta*cosTheta);
     
-    // Transformace ze sférických do kartézských souřadnic
+    // Transformation from spherical to Cartesian coordinates
     vec3 H;
     H.x = cos(phi) * sinTheta;
     H.y = sin(phi) * sinTheta;
     H.z = cosTheta;
     
-    // Transformace ze vzorkovaného prostoru (tangentního) do World-Space (N je Z-osa)
+    // Transformation from sample space (tangent) to World-Space (N is the Z-axis)
     vec3 up        = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
     vec3 tangent   = normalize(cross(up, N));
     vec3 bitangent = cross(N, tangent);
@@ -49,13 +49,13 @@ vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness) {
 
 void main() {
     vec3 N = normalize(localPos);    
-    vec3 R = N; // Při aproximaci prefiltrování předpokládáme, že pohled = normála = odraz
+    vec3 R = N; // When approximating prefiltering, we assume that view = normal = reflection
     vec3 V = R;
     
     vec3 prefilteredColor = vec3(0.0);
     float totalWeight = 0.0;
     
-    // Importance sampling pomocí Hammersley sekvence
+    // Importance sampling using Hammersley sequence
     for(uint i = 0u; i < SAMPLE_COUNT; ++i) {
         vec2 Xi = Hammersley(i, SAMPLE_COUNT);
         vec3 H  = ImportanceSampleGGX(Xi, N, roughness);

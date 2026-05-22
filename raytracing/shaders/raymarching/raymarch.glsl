@@ -1,10 +1,10 @@
 #version 450
-///Ray structure
+/// Ray structure
 struct Ray{
     vec3 start;
     vec3 dir;
 };
-///State structure for 3D DDA algorithm
+/// State structure for 3D DDA algorithm
 struct State{
     ivec3 cell;
     ivec3 move;
@@ -100,47 +100,47 @@ layout(std430, binding = 10) buffer RenderGrid {
     float data[]; // 8 floats per pixel
 };
 
-///Image width
+/// Image width
 uniform int width;
-///Image height
+/// Image height
 uniform int height;
-///View angle
+/// View angle
 uniform float viewAngle;
-///View matrix
+/// View matrix
 uniform mat4 view;
-///Project matrix
+/// Project matrix
 uniform mat4 proj;
-///Inverted view matrix
+/// Inverted view matrix
 uniform mat4 invView;
-///Inverted proj matrix
+/// Inverted proj matrix
 uniform mat4 invProj;
-///Maximum amount of steps until claiming to not find surface
+/// Maximum amount of steps until claiming to not find surface
 uniform int maxStepCount;
-///Start of the grid
+/// Start of the grid
 uniform vec3 gridStart;
-///Voxel size
+/// Voxel size
 uniform float voxelSize;
-///support SPH radius
+/// support SPH radius
 uniform float h;
-///Particle size in object space
+/// Particle size in object space
 uniform float DforRIJ;
-///Amount of steps required to skip to Dagg
+/// Amount of steps required to skip to Dagg
 uniform int maxSkipCount;
-///Sphere radius
+/// Sphere radius
 uniform float rad;
-///Amount of cells in bdg
+/// Amount of cells in bdg
 uniform ivec3 cellsSize;
-///iso-value threshold
+/// iso-value threshold
 uniform float iso;
-///Amount of steps inside a voxel marked by bdg
+/// Amount of steps inside a voxel marked by bdg
 uniform int stepsInside;
-///A parameter from normal blending
+/// A parameter from normal blending
 uniform float A;
-///B parameter from normal blending
+/// B parameter from normal blending
 uniform float B;
-///Max level of bdg cells grouped into texels represented as 1 axis
+/// Max level of bdg cells grouped into texels represented as 1 axis
 uniform uint maxLevel;
-///If should render with anisotropic kernel
+/// If should render with anisotropic kernel
 uniform bool isAni;
 
 uniform bool showNormals;
@@ -160,9 +160,9 @@ float r1 = 0.5;
 float r2 = 0.2;
 
 const float pi = 3.141592f;
-const int lcs = 16; //equal to local size
-float poly6 = 315.0f/(64.0f*pi); //poly6
-float spiky = -45.0f/pi; //first derivative of spiky
+const int lcs = 16; // equal to local size
+float poly6 = 315.0f/(64.0f*pi); // poly6
+float spiky = -45.0f/pi; // first derivative of spiky
 const int MAX_INT = 2147483647;
 
 const vec3 spatula_color = vec3(0.9f, 0.9f, 0.9f);
@@ -176,10 +176,10 @@ uniform Material fluidMat;
 uniform Material spatulaMat;
 uniform Material floorMat;
 
-float ao_range_fluid = 0.30f; // Dosah stínu
-float min_darkness_fluid = 0.05f; // Minimální světlost (0.0 = černá, 1.0 = žádný stín)
-float ao_range_spatula = 0.15f; // Dosah stínu
-float min_darkness_spatula = 0.5f; // Minimální světlost
+float ao_range_fluid = 0.30f; // Shadow range
+float min_darkness_fluid = 0.05f; // Minimum brightness (0.0 = black, 1.0 = no shadow)
+float ao_range_spatula = 0.15f; // Shadow range
+float min_darkness_spatula = 0.5f; // Minimum brightness
 
 vec3 mix_latent_to_rgb( ParticlePigment pigments) {
     float c[7] = pigments.c;
@@ -224,57 +224,57 @@ vec2 rotateY(vec2 v, float a) {
 }
 
 float sdSpatula(vec3 p, bool with_handle) {
-    // Posun špachtle o 0.1 nahoru v ose Y.
+    // Shift the spatula up by 0.02 on the Y-axis.
     p.y -= 0.02;
 
-    float b1 = spatulaDim.x;           // Spodní šířka (poloměr)
-    float b2 = spatulaDim.x * 0.25;    // Horní šířka (poloměr)
-    float he = spatulaDim.z;           // Polovina výšky (Z)
+    float b1 = spatulaDim.x;           // Bottom width (radius)
+    float b2 = spatulaDim.x * 0.25;    // Top width (radius)
+    float he = spatulaDim.z;           // Half height (Z)
     float halfThickness = spatulaDim.y / 10.0;
 
     vec2 p2d = vec2(abs(p.x), p.z);
 
-    // 1. Vzdálenost k šikmé stěně (bok lichoběžníku)
-    // Definujeme úsečku od spodního rohu (b1, -he) k hornímu (b2, he)
+    // 1. Distance to the slanted wall (side of the trapezoid)
+    // Define a line segment from the bottom corner (b1, -he) to the top (b2, he)
     vec2 p1 = vec2(b1, -he);
     vec2 p2 = vec2(b2, he);
     vec2 ba = p2 - p1;
     vec2 pa = p2d - p1;
     float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    float d_side = length(pa - ba * h); // Vzdálenost k šikmé úsečce
+    float d_side = length(pa - ba * h); // Distance to the slanted line segment
 
-    // 2. Definice "vnitřku" (vzdálenost k ose X=0 v lichoběžníku)
-    // Tady musíme počítat, jak daleko je bod od šikmé stěny, ale se znaménkem
+    // 2. Definition of "inside" (distance to the X=0 axis in the trapezoid)
+    // Here we must calculate how far the point is from the slanted wall, but with a sign
     float inside_x = b1 - (b1 - b2) * (p2d.y + he) / (2.0 * he);
     float d_inside = p2d.x - inside_x;
 
-    // 3. Rozhodnutí (Sjednocení)
-    // Pokud jsme "uvnitř" (vlevo od šikmé stěny), vzdálenost je d_inside.
-    // Pokud jsme "vně", vzdálenost je d_side (k šikmé stěně).
+    // 3. Decision (Union)
+    // If we are "inside" (left of the slanted wall), the distance is d_inside.
+    // If we are "outside", the distance is d_side (to the slanted wall).
     float d_2d = (p2d.x < inside_x) ? d_inside : d_side;
 
-    // 4. Přidání půlkruhů na koncích
+    // 4. Adding semicircles at the ends
     if (p2d.y > he) {
         d_2d = length(vec2(p2d.x, p2d.y - he)) - b2;
     } else if (p2d.y < -he) {
         float r_x_bot = b1;
-        float r_z_bot = 1.5 * b1; // Opět protáhlost
+        float r_z_bot = 1.5 * b1; // Elongated shape again
         vec2 p_rel = vec2(p2d.x, p2d.y + he);
         float k0 = length(p_rel / vec2(r_x_bot, r_z_bot));
         float k1 = length(p_rel / (vec2(r_x_bot, r_z_bot) * vec2(r_x_bot, r_z_bot)));
         d_2d = k0 * (k0 - 1.0) / k1;
     }
 
-    // 5. Extruze
+    // 5. Extrusion
     // float d_y = abs(p.y + 0.01) - halfThickness;
     float d_y = abs(p.y) - halfThickness;
     float d_blade = max(d_2d, d_y);
 
     if (!with_handle) return d_blade;
 
-    // Válce rukojeti (využíváme inverzní rotace)
+    // Handle cylinders (using inverse rotation)
     vec3 p_handle = p;
-    p_handle.xz = rotateY(p_handle.xz, 90.0 * pi / 180.0); // Inverzní rotace
+    p_handle.xz = rotateY(p_handle.xz, 90.0 * pi / 180.0); // Inverse rotation
 
     vec3 p_cyl1 = p_handle - vec3(5.62, 1.76, 0.0);
     p_cyl1.xy = rotateZ(p_cyl1.xy, -105.19 * pi / 180.0);
@@ -284,7 +284,7 @@ float sdSpatula(vec3 p, bool with_handle) {
     p_cyl2.xy = rotateZ(p_cyl2.xy, 62.0 * pi / 180.0);
     float d_cyl2 = sdCylinder(p_cyl2, 0.131 * 0.5, 2.293 * 0.5);
 
-    // Sjednocení geometrie (Union)
+    // Geometry union
     return min(d_blade, min(d_cyl1, d_cyl2));
 }
 
@@ -292,11 +292,11 @@ bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
     vec3 origin = (invSpatulaTransform * vec4(ray.start, 1.0)).xyz;
     vec3 direction = (invSpatulaTransform * vec4(ray.dir, 0.0)).xyz;
 
-    // Normalizace směru pro bezpečný sphere tracing (řeší ztenčení přes scale matici)
+    // Normalize direction for safe sphere tracing (solves thinning due to scale matrix)
     float dir_len = length(direction);
     vec3 dir_local = direction / dir_len;
 
-    // 1. Slab test pro Bounding Box (urychlení)
+    // 1. Slab test for Bounding Box (acceleration)
     vec3 invDir = 1.0 / (dir_local + sign(dir_local) * 1e-9);
     vec3 paddingT = vec3(0.05); // 5 cm reserve
     
@@ -314,16 +314,16 @@ bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
 
     if (t_near > t_far || t_far < 0.0) return false;
 
-    // 2. Sphere Tracing uvnitř Bounding Boxu
-    float t = max(0.0, t_near - 0.001); // mírný posun vzad pro jistotu zachycení hrany
+    // 2. Sphere Tracing inside the Bounding Box
+    float t = max(0.0, t_near - 0.001); // slight shift backward to ensure edge capture
     int max_iter = fullRender ? 128 : 40;
     float hit_threshold = fullRender ? 0.0001 : 0.002;
     for(int i = 0; i < max_iter; i++) {
         vec3 p_local = origin + dir_local * t;
         float dist = sdSpatula(p_local, false);
 
-        if(dist < hit_threshold) { // Povrch nalezen
-            t_hit = t / dir_len; // Převod vzdálenosti zpět do World Space
+        if(dist < hit_threshold) { // Surface found
+            t_hit = t / dir_len; // Convert distance back to World Space
             hit_pos = ray.start + ray.dir * t_hit;
             return true;
         }
@@ -336,10 +336,10 @@ bool rayMarchSpatula(Ray ray, out float t_hit, out vec3 hit_pos, float max_t) {
 }
 
 vec3 getSpatulaNormal(vec3 pos_ws) {
-    // Transformace bodu do lokálního prostoru
+    // Transform point to local space
     vec3 p_local = (invSpatulaTransform * vec4(pos_ws, 1.0)).xyz;
     
-    // Gradient - Epsilon (e.x) musí být vždy menší než celková tloušťka objektu!
+    // Gradient - Epsilon (e.x) must always be smaller than the total thickness of the object!
     vec2 e = vec2(0.00005, 0.0);
     vec3 n_local = normalize(vec3(
         sdSpatula(p_local + e.xyy, false) - sdSpatula(p_local - e.xyy, false),
@@ -347,26 +347,26 @@ vec3 getSpatulaNormal(vec3 pos_ws) {
         sdSpatula(p_local + e.yyx, false) - sdSpatula(p_local - e.yyx, false)
     ));
     
-    // Transformace normály zpět do World Space
-    // Korektní transformace normály pomocí inverzní transponované matice (L2W^-T)
+    // Transform normal back to World Space
+    // Correct transformation of the normal using the inverse transpose matrix (L2W^-T)
     vec3 normal_ws = normalize(transpose(mat3(invSpatulaTransform)) * n_local);
     
-    // Transformace do View Space pro lighting
+    // Transform to View Space for lighting
     return normalize(mat3(view) * normal_ws);
 }
 
-///Computes position and direction in the world of the ray
+/// Computes position and direction in the world of the ray
 void getRay(ivec2 pix, float depth, out Ray ray){
     vec2 res = vec2(width, height);
-    vec2 ndc = 2.0f * ((vec2(pix) + 0.5f) / res) - 1.0f; //getting ndc
-    vec4 p_v = invProj * vec4(ndc, -1.0f, 1.0f); //restoring point on a near plane in view coords
+    vec2 ndc = 2.0f * ((vec2(pix) + 0.5f) / res) - 1.0f; // getting ndc
+    vec4 p_v = invProj * vec4(ndc, -1.0f, 1.0f); // restoring point on a near plane in view coords
     p_v /= p_v.w;
-    vec3 dir_v = normalize(p_v.xyz); //getting direction vector
-    vec3 start_v = dir_v * depth/(-dir_v.z); //getting start poing from Dall, direction * (Dall depth) / direction.z in that pix
+    vec3 dir_v = normalize(p_v.xyz); // getting direction vector
+    vec3 start_v = dir_v * depth/(-dir_v.z); // getting start point from Dall, direction * (Dall depth) / direction.z in that pix
     ray.start = (invView * vec4(start_v, 1.0f)).xyz;
     ray.dir = normalize((invView * vec4(dir_v, 0.0f)).xyz);
 }
-///Changes level between texels in bdg
+/// Changes level between texels in bdg
 void changeLevel(uint level, in Ray ray, inout State state){
     if(state.currLevel == level) return;
     vec3 pos = ray.start + ray.dir * state.tcurr;
@@ -375,7 +375,7 @@ void changeLevel(uint level, in Ray ray, inout State state){
     state.cell = ivec3(floor((pos - gridStart) / curr));
     state.currLevel = level;
 }
-///Initializes state of 3D DDA
+/// Initializes state of 3D DDA
 void stateInit(out State state, in Ray ray){
     state.cell = ivec3(floor((ray.start - gridStart) / voxelSize));
     bvec3 zero = equal(ray.dir, vec3(0.0f));
@@ -386,7 +386,7 @@ void stateInit(out State state, in Ray ray){
     state.currLevel = 1u;
     state.tNext = vec3(0.0f);
 }
-///Checks if a texel(or voxel) for current bdg might contain surface
+/// Checks if a texel(or voxel) for current bdg might contain surface
 uint getPossibility(in State state){
     uint possibility = 0;
     ivec3 currentSize;
@@ -400,35 +400,35 @@ uint getPossibility(in State state){
     bvec3 outOfBoundsLess = lessThan(state.cell, ivec3(0));
 
     if(any(outOfBoundsLess) || any(outOfBoundsGreat)){
-        // 1. KONTROLA PADDINGU (pro anizotropní přesahy)
-        // Povolujeme nahlédnout kousek za hranice v Level 1
+        // 1. PADDING CHECK (for anisotropic overlaps)
+        // Allow peeking a bit beyond the boundaries in Level 1
         if (state.currLevel == 1u) {
             if (all(greaterThanEqual(state.cell, ivec3(-3))) && 
                 all(lessThanEqual(state.cell, cellsSize + ivec3(2)))) 
-                return 1u; // Povolíme výpočet hustoty v "halo" zóně
+                return 1u; // Allow density calculation in the "halo" zone
         }
 
-        // 2. KONTROLA SMĚRU (Zabránění nekonečným smyčkám)
-        // Pokud jsme mimo a paprsek míří pryč od mřížky, ukončíme ho
+        // 2. DIRECTION CHECK (Prevent infinite loops)
+        // If we are outside and the ray is pointing away from the grid, terminate it
         if ((outOfBoundsLess.x && state.move.x <= 0) || (outOfBoundsGreat.x && state.move.x >= 0) ||
             (outOfBoundsLess.y && state.move.y <= 0) || (outOfBoundsGreat.y && state.move.y >= 0) ||
             (outOfBoundsLess.z && state.move.z <= 0) || (outOfBoundsGreat.z && state.move.z >= 0)) {
-            return 1000u; // Definitivní konec
+            return 1000u; // Definitive end
         }
 
-        // 3. POKRAČOVÁNÍ (Skip k mřížce)
-        // Jsme mimo, ale míříme k mřížce -> skipneme prázdný prostor
+        // 3. CONTINUE (Skip to the grid)
+        // We are outside, but pointing towards the grid -> skip empty space
         return 0u; 
     }
 
-    // Načtení reálných dat z BDG pokud jsme uvnitř
+    // Load real data from BDG if we are inside
     if(state.currLevel == 4u) possibility = M4[state.cell.x + cS4.x * (state.cell.z * cS4.y + state.cell.y)];
     else if(state.currLevel == 2u) possibility = M2[state.cell.x + cS2.x * (state.cell.z * cS2.y + state.cell.y)];
     else possibility = M[state.cell.x + cellsSize.x * (state.cell.z * cellsSize.y + state.cell.y)];
 
     return possibility;
 }
-///Moves the ray inside with tiny steps
+/// Moves the ray inside with tiny steps
 void moveInside(inout State state, in Ray ray){
     bvec3 rl = equal(state.move, ivec3(1));
     vec3 nextCoord = vec3(mix(gridStart + vec3(state.cell) * h, gridStart + (vec3(state.cell)+ vec3(1.0f)) * h, rl));
@@ -442,20 +442,20 @@ void moveInside(inout State state, in Ray ray){
         state.tNext[id] += state.delta[id];
     }
 }
-///Skips to the next voxel/texel
+/// Skips to the next voxel/texel
 void skipToNext(inout State state, in Ray ray){
     vec3 pos = ray.start + ray.dir * state.tcurr;
     bvec3 rl = equal(state.move, ivec3(1));
     vec3 nextCoord = vec3(mix(gridStart + vec3(state.cell) * (h * float(state.currLevel)),
     gridStart + (vec3(state.cell)+ vec3(1.0f)) * (h * float(state.currLevel)), rl));
     bvec3 b = equal(state.move, ivec3(0));
-    state.tNext = mix((nextCoord - pos) / ray.dir, vec3(MAX_INT), b); //if move is 0 then we do not consider this axis
+    state.tNext = mix((nextCoord - pos) / ray.dir, vec3(MAX_INT), b); // if move is 0 then we do not consider this axis
     uint minMove = (state.tNext.x < state.tNext.y && state.tNext.x < state.tNext.z) ? 0 : state.tNext.y < state.tNext.z ? 1 : 2;
     state.cell[minMove] += state.move[minMove];
     state.tcurr += state.tNext[minMove];
 //    state.tNext[minMove] += state.delta[minMove];
 }
-///Traverses the ray until it finds the cell marked in bdg
+/// Traverses the ray until it finds the cell marked in bdg
 void updateTCurr(inout State state, in Ray ray){
     if(state.currLevel == 1u && getPossibility(state) == 1u){
         moveInside(state, ray);
@@ -465,7 +465,7 @@ void updateTCurr(inout State state, in Ray ray){
     changeLevel(level, ray, state);
     while(true){
         uint possibility = getPossibility(state);
-        if(possibility == 1000u) return; //means out of bounds
+        if(possibility == 1000u) return; // means out of bounds
         if(possibility == 0){
             skipToNext(state, ray);
         }
@@ -481,9 +481,9 @@ void updateTCurr(inout State state, in Ray ray){
 }
 
 vec3 computeFilteredColor(vec3 pos) {
-    // 1. Setup spatial parameters pro rozšířené okolí (3x3x3 = 27 voxelů)
+    // 1. Setup spatial parameters for the extended neighborhood (3x3x3 = 27 voxels)
     vec3 pig_pos = (pos - gridStart) / (voxelSize / 4.0) - 0.5;
-    ivec3 center_cell = ivec3(round(pig_pos)); // Místo floor bereme nejbližší středový voxel
+    ivec3 center_cell = ivec3(round(pig_pos)); // Instead of floor, we take the nearest center voxel
     ivec3 pigCellsSize = cellsSize * 4;
 
     ParticlePigment colors[27];
@@ -501,13 +501,13 @@ vec3 computeFilteredColor(vec3 pos) {
                 ivec3 current_cell = clamp(center_cell + offset, ivec3(0), pigCellsSize - ivec3(1));
                 uint idx = (uint(current_cell.z) * uint(pigCellsSize.y) * uint(pigCellsSize.x) + uint(current_cell.y) * uint(pigCellsSize.x) + uint(current_cell.x)) * 8u;
                 
-                // Načteme barvu souseda
+                // Load neighbor's color
                 for(int c=0; c<7; ++c) colors[i].c[c] = data[idx + c];
 
-                // Rozšířená vyhlazená váha (aplikace smoothstep filtru)
+                // Extended smoothed weight (application of smoothstep filter)
                 vec3 dist = abs(pig_pos - vec3(center_cell + offset));
-                // Smoothstep zajistí, že na hranici (1.5) bude váha plynule 
-                // a měkce klesat k nule bez ostrého zlomu v interpolaci.
+                // Smoothstep ensures that at the boundary (1.5), the weight will smoothly
+                // and softly decrease to zero without a sharp break in interpolation.
                 vec3 w3 = smoothstep(vec3(1.5), vec3(0.0), dist);
                 weights[i] = w3.x * w3.y * w3.z;
                 sum_w += weights[i];
@@ -517,7 +517,7 @@ vec3 computeFilteredColor(vec3 pos) {
         }
     }
 
-    // Normalizace vah a výpočet váženého průměru (smooth trilinear ref)
+    // Normalize weights and calculate weighted average (smooth trilinear ref)
     for (int j = 0; j < 27; ++j) {
         weights[j] /= max(sum_w, 0.00001);
         for(int c=0; c<7; ++c) {
@@ -525,45 +525,45 @@ vec3 computeFilteredColor(vec3 pos) {
         }
     }
 
-    // Normalizace průměrných pigmentů
+    // Normalize average pigments
     float mean_pigment_sum = mean.c[0] + mean.c[1] + mean.c[2] + mean.c[3];
-    // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+    // Since we are working only with opaque pigments, their sum should always be 1.
     if (mean_pigment_sum > 0.00001) {
         for(int c=0; c<4; ++c) mean.c[c] /= mean_pigment_sum;
     }
 
-    // 2. Výpočet lokálního rozptylu (variance)
+    // 2. Calculate local variance
     float variance = 0.0;
     for (int j = 0; j < 27; ++j) {
         float diffSq = 0.0;
-        for(int c=0; c<4; ++c) { // Používáme jen 4 pigmenty pro vzdálenost
+        for(int c=0; c<4; ++c) { // We only use 4 pigments for the distance
             float d = colors[j].c[c] - mean.c[c];
             diffSq += d * d;
         }
         variance += diffSq * weights[j];
     }
 
-    // 3. Adaptivní sigma na základě variance (rozptyl v 27 voxelech)
+    // 3. Adaptive sigma based on variance (dispersion in 27 voxels)
     float sigma_min = 0.001;
     float sigma_max = max(sigma_color, 0.01);
-    float scale = 10.0; // Citlivost na varianci (možno později vytáhnout do uniform)
+    float scale = 10.0; // Sensitivity to variance (can be extracted to a uniform later)
     float adaptiveSigma = mix(sigma_min, sigma_max, clamp(variance * scale, 0.0, 1.0));
     float sigColorSq = max(adaptiveSigma * adaptiveSigma, 0.000001);
 
-    // 4. Bilaterální filtrace v rozšířeném okolí
+    // 4. Bilateral filtering in the extended neighborhood
     ParticlePigment final_pigment;
     for(int c=0; c<7; ++c) final_pigment.c[c] = 0.0;
     float totalWeight = 0.0;
 
     for (int j = 0; j < 27; ++j) {
-        // Výpočet barevné podobnosti (Mixbox vzdálenost)
+        // Compute color distance in the latent pigment space (using only the first 4 pigments which represent the actual color)
         float colorDistSq = 0.0;
         for(int c=0; c<4; ++c) {
             float d = colors[j].c[c] - mean.c[c];
             colorDistSq += d * d;
         }
         
-        // Bilaterální váha: W_final = W_spatial * e^(-dist^2 / sigma^2)
+        // Bilateral weight: W_final = W_spatial * e^(-dist^2 / sigma^2)
         float rangeWeight = exp(-colorDistSq / sigColorSq);
         float finalWeight = weights[j] * (rangeWeight + 0.05);
         
@@ -573,27 +573,27 @@ vec3 computeFilteredColor(vec3 pos) {
         totalWeight += finalWeight;
     }
 
-    // 5. Normalizace
+    // 5. Normalization
     if (totalWeight > 0.00001) {
         for (int c = 0; c < 7; ++c) {
             final_pigment.c[c] /= totalWeight;
         }
 
-        // Normalizace finálních pigmentů
+        // Normalize final pigments
         float final_pigment_sum = final_pigment.c[0] + final_pigment.c[1] + final_pigment.c[2] + final_pigment.c[3];
-        // Jelikož pracujeme pouze s neprůhlednými pigmenty, jejich součet by měl být vždy 1.
+        // Since we are working only with opaque pigments, their sum should always be 1.
         if (final_pigment_sum > 0.00001) {
             for(int c=0; c<4; ++c) final_pigment.c[c] /= final_pigment_sum;
         }
 
         return mix_latent_to_rgb(final_pigment);
     } else {
-        // Bezpečný fallback na hladkou interpolaci (mean), pokud obě váhy zkolabují
+        // Safe fallback to smooth interpolation (mean) if both weights collapse
         return mix_latent_to_rgb(mean); 
     }
 }
 
-///Computes density at the current point using only 27 cells around it using poly6 kern
+/// Computes density at the current point using only 27 cells around it using poly6 kern
 float computeDensity(vec3 pos, vec3 ray_start, float depth, ivec2 pix, out vec3 outColor){
     float density = 0.0f;
     outColor = vec3(0.0f);
@@ -685,12 +685,12 @@ float computeDensity(vec3 pos, vec3 ray_start, float depth, ivec2 pix, out vec3 
     return density;
 }
 
-/// Odlehčená verze výpočtu hustoty čistě pro stínové volumetrické paprsky (bez barvy)
+/// Lightweight version of density calculation purely for volumetric shadow rays (without color)
 float computeDensityOnly(vec3 pos, float radius_scale){
     float density = 0.0f;
     ivec3 cell = ivec3(floor((pos - gridStart) / voxelSize));
     
-    // Zvětšíme oblast hledání, pokud je stínový kužel široký (zachytíme i zvětšené částice)
+    // Increase the search area if the shadow cone is wide (to capture enlarged particles as well)
     int ext = radius_scale > 1.5 ? 2 : 1;
     
     for(int x = -ext; x <= ext; x++){
@@ -726,7 +726,7 @@ float computeDensityOnly(vec3 pos, float radius_scale){
                     }
                 
                     w *= poly6 * hr2 * hr2 * hr2;
-                    // Zachování celkové hmotnosti vydělením novým objemem (scale^3)
+                    // Preserve total mass by dividing by the new volume (scale^3)
                 density += w / (rs2 * radius_scale);
                 }
             }
@@ -737,36 +737,36 @@ float computeDensityOnly(vec3 pos, float radius_scale){
 
 float calcFluidShadow(vec3 ro, vec3 rd, float maxt, bool is_from_floor) {
     float res = 1.0;
-    // Dynamický offset: menší pro podlahu (0.02), větší pro self-shadowing (0.1)
+    // Dynamic offset: smaller for the floor (0.02), larger for self-shadowing (0.1)
     float t = is_from_floor ? 0.02 : 0.1;
-    float k = 4.0; // Měkost stínu
+    float k = 4.0; // Shadow softness
 
-    // Optimalizace: Tekutina je jen u podlahy, není třeba trasovat daleko.
-    // Omezíme maximální vzdálenost a počet kroků.
-    float effective_maxt = 2.5; // Maximální délka stínu od tekutiny
+    // Optimization: The fluid is only near the floor, no need to trace far.
+    // We limit the maximum distance and number of steps.
+    float effective_maxt = 2.5; // Maximum length of shadow from fluid
     int max_steps = 80;
 
     for(int i = 0; i < max_steps && t < effective_maxt; i++) {
         vec3 p = ro + rd * t;
         
-        // Vzorkujeme hustotu s radius_scale = 1.0
+        // Sample density with radius_scale = 1.0
         float dens = computeDensityOnly(p, 1.0);
         
         if (dens > 0.001) {
             float d = clamp((iso - dens) / iso, 0.0, 1.0);
             res = min(res, k * d / t);
-            if(dens > iso * 1.2) return 0.0; // Uvnitř hustého objemu je plný stín
+            if(dens > iso * 1.2) return 0.0; // Inside a dense volume, there is full shadow
         }
         
         if(res < 0.01) return 0.0;
 
-        // Konzistentní krok pro plynulé stíny, odvozený od 'h'
+        // Consistent step for smooth shadows, derived from 'h'
         t += h * 0.4; 
     }
     return clamp(res, 0.0, 1.0);
 }
 
-/// Vypočítá měkký SDF stín pro špachtli a její rukojeť
+/// Computes a soft SDF shadow for the spatula and its handle
 float calcSpatulaShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     if (!has_spatula) return 1.0;
     
@@ -775,7 +775,7 @@ float calcSpatulaShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     float dir_len = length(direction);
     vec3 dir_local = direction / dir_len;
 
-    // OPTIMIZATION: Slab test pro Bounding Box pro stínový paprsek
+    // OPTIMIZATION: Slab test for Bounding Box for the shadow ray
     vec3 invDir = 1.0 / (dir_local + sign(dir_local) * 1e-9);
     vec3 paddingT = vec3(0.05); // 5 cm reserve
     vec3 boxMin = vec3(-spatulaDim.x - 9.0, -spatulaDim.y - 2.0, -spatulaDim.z - 9.0);
@@ -789,32 +789,32 @@ float calcSpatulaShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     float t_near = max(tMin.x, max(tMin.y, tMin.z));
     float t_far = min(tMax.x, min(tMax.y, tMax.z));
 
-    // Paprsek míjí Bounding Box špachtle -> 100% světlo
+    // Ray misses the spatula's Bounding Box -> 100% light
     if (t_near > t_far || t_far < 0.0 || (t_near / dir_len) > maxt) return 1.0;
 
     float res = 1.0;
-    // Začneme stínovat až od Bounding Boxu, ušetří to kroky v prázdnu!
+    // Start shading only from the Bounding Box, this saves steps in empty space!
     float t = max(mint, (t_near / dir_len) - 0.01); 
     
-    for(int i = 0; i < 30 && t < maxt; i++) { // OPTIMIZATION: Sníženo z 64 na 30 iterací
+    for(int i = 0; i < 30 && t < maxt; i++) { // OPTIMIZATION: Reduced from 64 to 30 iterations
         vec3 p = ro + rd * t;
         vec3 p_local = (invSpatulaTransform * vec4(p, 1.0)).xyz;
         float d = sdSpatula(p_local, true);
         float d_world = d / dir_len;
         
-        if(d_world < 0.001) return 0.0; // Paprsek narazil do špachtle
+        if(d_world < 0.001) return 0.0; // Ray hit the spatula
         
         res = min(res, k * d_world / t);
-        t += clamp(d_world, 0.03, 0.4); // Zvětšený minimální krok
+        t += clamp(d_world, 0.03, 0.4); // Increased minimum step
         
-        if ((t * dir_len) > t_far + 0.05) break; // Konec, jakmile opustíme AABB
+        if ((t * dir_len) > t_far + 0.05) break; // End as soon as we leave the AABB
     }
     return clamp(res, 0.0, 1.0);
 }
 
 float calcShadow(vec3 ro, vec3 rd, bool is_from_floor) {
-    float maxt = 10.0; // Maximální vzdálenost stínování
-    float spatShadow = calcSpatulaShadow(ro, rd, 0.05, maxt, 16.0); // k=16 pro měkký penumbra okraj
+    float maxt = 10.0; // Maximum shadow distance
+    float spatShadow = calcSpatulaShadow(ro, rd, 0.05, maxt, 16.0); // k=16 for a soft penumbra edge
     float fluidShadow = calcFluidShadow(ro, rd, maxt, is_from_floor);
     return spatShadow * fluidShadow;
 }
@@ -861,7 +861,7 @@ vec3 getObjectNormal(vec3 xij){
                         continue;
                     }
                     
-                    float r = sqrt(r2); // Odmocninu děláme jen pro body, které skutečně prošly testem (zlomek původního počtu)
+                    float r = sqrt(r2); // We only do the square root for points that actually passed the test (a fraction of the original number)
                     float over = isAni ? 1.0f : h;
                     float hr = over - r;
                     float dw = spiky * (hr * hr);
@@ -873,13 +873,13 @@ vec3 getObjectNormal(vec3 xij){
     }
     return normalize(-grad);
 }
-///Computes final normal by blending screen and object space normals
+/// Computes final normal by blending screen and object space normals
 vec3 computeNormal(vec3 pij, vec3 xij, ivec2 pix, float depth_from_tex){
     float realDepth = (view * vec4(xij, 1.0)).z;
     vec3 NScreenxij = texelFetch(Nscreen, pix, 0).xyz;
     
-    if (!fullRender) {
-        return NScreenxij; // Extrémní zrychlení pro preview: použije se pouze normála z depth bufferu
+    if (!fullRender) { // Extreme acceleration for preview: only the normal from the depth buffer is used
+        return NScreenxij;
     }
     
     // cekch discontinuity
@@ -902,33 +902,33 @@ float computeContactShadow(vec3 pos) {
     
     // 1. Fluid AO
     float dist_fluid = 1e6;
-    vec3 p_ao = pos + vec3(0.0, 0.002, 0.0); // Začneme mírně nad podlahou
+    vec3 p_ao = pos + vec3(0.0, 0.002, 0.0); // Start slightly above the floor
 
-    // Prohledáváme prostor směrem nahoru a hledáme první bod, kde hustota překročí 'iso'.
-    // Tím zajistíme, že stín vrhá pouze hmota, která je viditelná i v hlavním renderu.
+    // We search upwards for the first point where density exceeds 'iso'.
+    // This ensures that the shadow is cast only by mass that is also visible in the main render.
     for (int i = 0; i < 60; ++i) { 
         float density = computeDensityOnly(p_ao, 1.0);
-        if (density > iso) { // Používáme stejnou prahovou hodnotu jako pro renderování
+        if (density > iso) { // Use the same threshold as for rendering
             dist_fluid = p_ao.y - pos.y;
             break;
         }
-        p_ao.y += 0.005; // Krok o 5mm
+        p_ao.y += 0.005; // 5mm step
     }
-    float t_fluid = clamp(dist_fluid / ao_range_fluid, 0.0, 1.0); // Normalizujeme vzdálenost na [0,1]
-    float fluid_ao_factor = sqrt(t_fluid); // Ease-out křivka pro plynulý přechod
-    ao = min(ao, mix(min_darkness_fluid, 1.0, fluid_ao_factor)); // Smícháme mezi plnou tmavostí a žádným stínem
+    float t_fluid = clamp(dist_fluid / ao_range_fluid, 0.0, 1.0); // Normalize distance to [0,1]
+    float fluid_ao_factor = sqrt(t_fluid); // Ease-out curve for a smooth transition
+    ao = min(ao, mix(min_darkness_fluid, 1.0, fluid_ao_factor)); // Mix between full darkness and no shadow
 
     // 2. Spatula AO
     if (has_spatula) {
         vec3 p_local = (invSpatulaTransform * vec4(pos, 1.0)).xyz;
         float dist_spatula = sdSpatula(p_local, true);
         float t_spatula = clamp(dist_spatula / ao_range_spatula, 0.0, 1.0);
-        float spatula_ao_factor = sqrt(t_spatula); // Ease-out křivka
+        float spatula_ao_factor = sqrt(t_spatula); // Ease-out curve
         ao = min(ao, mix(min_darkness_spatula, 1.0, spatula_ao_factor));
     }
 
-    // Nelineární průběh pro "hustší" stín u kontaktu
-    // Původní pow(occ, 2.0) je odstraněn, protože mix() a sqrt() už poskytují nelineární průběh.
+    // Non-linear curve for a "denser" shadow at the contact point
+    // The original pow(occ, 2.0) is removed because mix() and sqrt() already provide a non-linear curve.
     return ao;
 }
 
@@ -958,9 +958,7 @@ void main(){
     float t_spatula = 1e6; 
     bool hit_spatula = false;
 
-    // TEMP
     if (has_spatula) {
-    // if (false) {
         vec3 p_temp;
         hit_spatula = rayMarchSpatula(ray_vdb, t_spatula, p_temp, 1000.0);
     }
@@ -968,9 +966,9 @@ void main(){
     // 2. Intersect Floor
     float t_floor = 1e6;
     bool hit_floor = false;
-    // Kontrola, že paprsek míří směrem dolů k podlaze
+    // Check that the ray is pointing down towards the floor
     if (ray_vdb.dir.y < -0.0001) {
-        // Zde můžeš upravit výšku podlahy. Např. + 0.05 ji zvedne o 5 cm
+        // You can adjust the floor height here. E.g., +0.05 raises it by 5 cm
         float floor_height = - 0.025; 
         float temp_t = (floor_height - ray_vdb.start.y) / ray_vdb.dir.y;
         if (temp_t > 0.0) {
@@ -1006,7 +1004,7 @@ void main(){
                 depth = texelFetch(Dagg, pix, 0).r;
                 hasSkipped = true;
                 getRay(pix, depth, ray_mpm);
-                stateInit(state, ray_mpm); //Skipping to Dagg depth and starting from there
+                stateInit(state, ray_mpm); // Skipping to Dagg depth and starting from there
                 dist_to_mpm_start = length(ray_mpm.start - ray_vdb.start);
             }
             updateTCurr(state, ray_mpm);
@@ -1039,7 +1037,7 @@ void main(){
                 vec3 final_color;
                 if (fullRender) {
                     Material fluidMat_colored = fluidMat;
-                    fluidMat_colored.albedo = surfaceColor; // Použijeme barvu přímo jako albedo bez umělého zesílení
+                    fluidMat_colored.albedo = surfaceColor; // Use the color directly as albedo without artificial enhancement
                     final_color = computePBRLighting(fluidMat_colored, floorMat, pos, N_world, V_world, shadows);
                 } else {
                     vec3 irradiance = texture(irradianceMap, N_world).rgb;
@@ -1047,7 +1045,7 @@ void main(){
                 }
 
                 float viewZ = (view * vec4(pos, 1.0)).z;
-                imageStore(outTex, pix, vec4(final_color, 10.0f)); // 10.0f slouží jako tag pro tekutinu
+                imageStore(outTex, pix, vec4(final_color, 10.0f)); // 10.0f serves as a tag for the fluid
                 imageStore(normalDepthTex, pix, vec4(N, viewZ));
                 return;
             }
@@ -1076,7 +1074,7 @@ void main(){
             final_spatula_color = spatula_color * irradiance;
         }
         
-        imageStore(outTex, pix, vec4(final_spatula_color, 10.0f)); // 10.0f slouží jako tag pro špachtli
+        imageStore(outTex, pix, vec4(final_spatula_color, 10.0f)); // 10.0f serves as a tag for the spatula
         float viewZ = (view * vec4(pos_spatula, 1.0)).z;
         imageStore(normalDepthTex, pix, vec4(N, viewZ));
     } else if (env_hit_type == 2) { // Floor
@@ -1097,7 +1095,7 @@ void main(){
             for(int s = 0; s < numLights; s++) {
                 float rnd = rand(hit_pos.xz * 100.0 + vec2(s * 13.0, s * 17.0));
                 vec3 jitterDir = normalize(lightDirs[s] + (rnd - 0.5) * 0.2);                
-                // Stín z oken (kontaktní stín se aplikuje až na konci)
+                // Shadow from windows (contact shadow is applied at the end)
                 shadows[s] = calcShadow(hit_pos, jitterDir, true);
             }
         }
@@ -1105,8 +1103,8 @@ void main(){
         vec3 final_floor_color;
         if (fullRender) {
             final_floor_color = computePBRLighting(floorMat, floorMat, hit_pos, N_floor, V_world, shadows);
-            // Aplikace kontaktního stínu (Ambient Occlusion) na finální barvu.
-            // Tím se ztmaví jak přímé, tak nepřímé (ambientní) osvětlení.
+            // Apply contact shadow (Ambient Occlusion) to the final color.
+            // This darkens both direct and indirect (ambient) lighting.
             final_floor_color *= contactOcc;
         } else {
             vec3 irradiance = texture(irradianceMap, N_floor).rgb;
@@ -1120,14 +1118,14 @@ void main(){
             for(int s=0; s<numLights; ++s) shadowSum += shadows[s];
             outAlpha = shadowSum / numLights;
         }
-        imageStore(outTex, pix, vec4(final_floor_color, outAlpha)); // Hodnota stínu do Alpha kanálu
+        imageStore(outTex, pix, vec4(final_floor_color, outAlpha)); // Shadow value to Alpha channel
         imageStore(normalDepthTex, pix, vec4(N_floor_view, floorViewZ));
     } else { // Background
         imageStore(normalDepthTex, pix, vec4(1000.0f));
         if (fullRender) {
-            imageStore(outTex, pix, vec4(0.0, 0.0, 0.0, -1.0f)); // -1.0f tag pro průhledné pozadí
+            imageStore(outTex, pix, vec4(0.0, 0.0, 0.0, -1.0f)); // -1.0f tag for transparent background
         } else {
-            imageStore(outTex, pix, vec4(0.2, 0.2, 0.2, -2.0f)); // -2.0f tag pro pevné pozadí
+            imageStore(outTex, pix, vec4(0.2, 0.2, 0.2, -2.0f)); // -2.0f tag for solid background
         }
     }
 }
