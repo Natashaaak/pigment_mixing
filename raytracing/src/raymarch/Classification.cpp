@@ -10,20 +10,20 @@ Classification::Classification() {
     glGenBuffers(1, &SSBOdet);
 }
 
-void Classification::countDensities(SPHIntegrationSim *spph,  std::vector<unsigned> &idsDagg, std::vector<unsigned> &idsDall) {
+void Classification::countDensities(MPMIntegrationSim *mpm,  std::vector<unsigned> &idsDagg, std::vector<unsigned> &idsDall) {
     if (matrices.empty()) {
-        matrices.resize(spph->getParticleAmount());
-        matricesInv.resize(spph->getParticleAmount());
-        determinants.resize(spph->getParticleAmount(), 0);
-        densities.resize(spph->getParticleAmount(), 0);
+        matrices.resize(mpm->getParticleAmount());
+        matricesInv.resize(mpm->getParticleAmount());
+        determinants.resize(mpm->getParticleAmount(), 0);
+        densities.resize(mpm->getParticleAmount(), 0);
     }
 #pragma omp parallel for schedule(static)
-    for (int i = 0; i < spph->getParticleAmount(); ++i) {
-        countMatrix(spph, i);
+    for (int i = 0; i < mpm->getParticleAmount(); ++i) {
+        countMatrix(mpm, i);
     }
 #pragma omp parallel for schedule(static)
-    for (int i = 0; i < spph->getParticleAmount(); ++i) {
-        densities[i] = countCurrDens(spph, i);
+    for (int i = 0; i < mpm->getParticleAmount(); ++i) {
+        densities[i] = countCurrDens(mpm, i);
     }
     for (unsigned i = 0; i < densities.size(); ++i) {
         idsDall.push_back(i);
@@ -32,14 +32,14 @@ void Classification::countDensities(SPHIntegrationSim *spph,  std::vector<unsign
     }
 }
 
-void Classification::countMatrix(SPHIntegrationSim *spph, unsigned id) {
-    auto &parts = spph->getParticles();
+void Classification::countMatrix(MPMIntegrationSim *mpm, unsigned id) {
+    auto &parts = mpm->getParticles();
     glm::vec4 xi = parts[id];
     glm::vec3 xic(0);
     float wsum = 0.0f;
-    float h = spph->getSupportRadius();
+    float h = mpm->getSupportRadius();
     std::vector<unsigned> neighpos;
-    spph->neighborsByIndex(id, neighpos);
+    mpm->neighborsByIndex(id, neighpos);
 
     std::vector<float> wijs;
     wijs.reserve(neighpos.size());
@@ -99,11 +99,11 @@ void Classification::countMatrix(SPHIntegrationSim *spph, unsigned id) {
     determinants[id] = abs(glm::determinant(matrices[id]));
 }
 
-float Classification::countCurrDens(SPHIntegrationSim *spph, unsigned id) {
-    auto &parts = spph->getParticles();
+float Classification::countCurrDens(MPMIntegrationSim *mpm, unsigned id) {
+    auto &parts = mpm->getParticles();
     glm::vec4 xi = parts[id];
     std::vector<unsigned> neighpos;
-    spph->neighborsByIndex(id, neighpos);
+    mpm->neighborsByIndex(id, neighpos);
     float density = 0.0f;
     for (unsigned neigh : neighpos) {
         glm::vec4 xj = parts[neigh];

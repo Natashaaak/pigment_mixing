@@ -18,7 +18,9 @@
 #include "../timer.hpp"
 
 #include "../objects/object_general.hpp"
+#include "../objects/object_vdb.hpp"
 #include "../objects/object_plate.hpp"
+#include "../objects/object_spatula.hpp"
 
 class Simulation{
 public:
@@ -34,7 +36,8 @@ public:
 #endif
 
   unsigned int n_threads = 1; // number of OMP threads
-  unsigned int end_frame = 1; // last frame in the simulation
+  unsigned int end_frame = 10; // last frame in the simulation
+  unsigned int frame = 0;
 
   bool is_initialized = false;
   bool save_sim = true;
@@ -49,10 +52,15 @@ public:
   TV grid_reference_point = 2e10 * TV::Ones();
   TV gravity = TV::Zero();
 
+  bool use_particle_boundaries = false;
+  TV particle_boundary_min = -5.0 * TV::Ones();
+  TV particle_boundary_max =  5.0 * TV::Ones();
+
   T min_dt = 1e-14; // minimum dt, also used to check  end of frame, use with caution
   T fps = 1; // frames per second
   T cfl = 0.5; // classical CFL coefficient
-  T cfl_elastic = 0.5; // CFL-like coffefficient for elastic wave speed
+  T cfl_elastic = 1; // CFL-like coffefficient for elastic wave speed
+  // T cfl_elastic = 0.5; // CFL-like coffefficient for elastic wave speed
   T flip_ratio = -0.95; // [0,1]: PIC/FLIP where 1 is FLIP and 0 is PIC. [-1,0): APIC/AFLIP where -1 is AFLIP.
   T rho = 1000; // density
   T gravity_time = 0; // used if gravity_special = true
@@ -76,7 +84,8 @@ public:
   PlasticModel plastic_model = PlasticModel::NoPlasticity;
   HardeningLaw hardening_law = HardeningLaw::ExpoImpl;
   bool use_pradhana = true; // volume correction for Drucker-Prager-based models
-  T E = 1e6; // Young's modulus (3D)
+  // T E = 1e6; // Young's modulus (3D)
+  T E = 1e5; // Young's modulus (3D)
   T nu = 0.3; // Poisson's ratio (3D)
   T stress_tolerance = 1e-5; // only used in some models
   T xi = 0; // softening/hardening parameter
@@ -108,9 +117,19 @@ public:
   // Prefactor for q in plasticity models
   T q_prefac  = 1.0 / std::sqrt(2.0); // q = factor * ||dev(tau)||
 
+  // Pigment Diffusion Parameters
+  T pigment_D_max = 10e-2;
+  T pigment_D_edge0 = 0.5;
+  T pigment_D_edge1 = 0.8;
+  T start_boost_time = 20.0;
+  T end_boost_time = 40.0;
+  T boost_factor = 2.0;
+
   // Objects
   std::vector<std::unique_ptr<ObjectPlate>> plates;
   std::vector<std::unique_ptr<ObjectGeneral>> objects;
+  ObjectSpatula* spatula_ptr = nullptr;
+  std::string spatula_anim_path;
 
   // Functions
   void initialize(bool save = true, std::string dir = "output/", std::string name = "dummy");
@@ -134,6 +153,7 @@ public:
   void deformationUpdate();
   void MUSL();
   void positionUpdate();
+  void precomputeWeights();
   void PBCAddParticles1D();
   void PBCAddParticles(unsigned int safety_factor);
   void PBCDelParticles();
@@ -149,10 +169,25 @@ public:
   TM NeoHookeanPiola(TM & Fe);
   TM HenckyPiola(TM & Fe);
 
-private:
+  // New function for raytracing integration
+  void initializeBasic(std::string name);
+  void setupScene(const float fps, const std::vector<float>& colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>>& pigments, const std::string& spatula_anim_path);
+  void sampleMultipleVdbObjects(std::vector<std::string> vdb_filenames, std::vector<uint8_t> colors, T kRadius, T ppc);
+  void blobs(const std::vector<float> &colorRatios, const std::vector<Eigen::Matrix<float, 7, 1>> &pigments);
+  void prepareSimulation();
+  void step();
+  bool frameFinished();
+  bool isFinished() const;
+
+  int getMorphPair(float targetVolume);
+  float findTForExactVolume(typename ObjectVdb::GridT::Ptr gridA, typename ObjectVdb::GridT::Ptr gridB, float factorA, float factorB, float targetVolume);
+
+  std::pair<std::vector<T>, std::vector<T>> getGridBoundaries() const;
+  ObjectSpatula* getSpatulaObject() const { return spatula_ptr; };
+
+  private:
 
   unsigned int current_time_step = 0;
-  unsigned int frame = 0;
 
   T time = 0;
   T runtime_p2g = 0;
@@ -187,6 +222,8 @@ private:
   T one_over_dx_square;
   T apicDinverse;
 
+  std::vector<ParticleNeighborhood> p_neighbors;
+
   // Grid handling and remeshing
   Grid grid;
   unsigned int Nx, Ny;
@@ -210,12 +247,16 @@ private:
   T Nx_init;
   T low_x_init;
   T high_x_init;
+  T low_x;
+  T high_x;
 
   T min_y_init;
   T max_y_init;
   T Ny_init;
   T low_y_init;
   T high_y_init;
+  T low_y;
+  T high_y;
 
 #ifdef THREEDIM
   T min_z_init;
@@ -223,7 +264,20 @@ private:
   T Nz_init;
   T low_z_init;
   T high_z_init;
+  T low_z;
+  T high_z;
 #endif
+
+  // initial objects names and their volume
+  const std::vector<BlobModel> blobDatabase = {
+    {"../matter/levelsets/blobs/Blob_01.vdb", 0.0056f, 1.18518519402f},
+    {"../matter/levelsets/blobs/Blob_02.vdb", 0.0151f, 1.0168350935f},
+    {"../matter/levelsets/blobs/Blob_03.vdb", 0.0246f, 1.01122200489f},
+    {"../matter/levelsets/blobs/Blob_04.vdb", 0.0341f, 0.998389661312f},
+    {"../matter/levelsets/blobs/Blob_05.vdb", 0.0436f, 0.994956791401f},
+    {"../matter/levelsets/blobs/Blob_06.vdb", 0.053f,  1.02880656719f}
+  };
+
 }; // end Simulation class
 
 inline TM Simulation::NeoHookeanPiola(TM & Fe){

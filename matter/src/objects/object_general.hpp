@@ -20,6 +20,9 @@ public:
 
     virtual TV normal(const TV& X_in) const = 0;
 
+    virtual TV velocity(const TV& X_in) const {
+        return TV::Zero();
+    }
 };
 
 #endif  // OBJECTGENERAL_HPP

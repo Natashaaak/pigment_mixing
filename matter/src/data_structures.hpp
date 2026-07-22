@@ -4,10 +4,12 @@
 #define DATA_STRUCTURES_HPP
 
 #include "tools.hpp"
+#include <array>
 
 class Particles{
 public:
   Particles(unsigned int Np = 1){
+      active.resize(Np); std::fill( active.begin(), active.end(), true );
       x.resize(Np); std::fill( x.begin(), x.end(), TV::Zero() );
       v.resize(Np); std::fill( v.begin(), v.end(), TV::Zero() );
       pic.resize(Np); std::fill( pic.begin(), pic.end(), TV::Zero() );
@@ -22,8 +24,11 @@ public:
 
       F.resize(Np); std::fill( F.begin(), F.end(), TM::Identity() );
       Bmat.resize(Np); std::fill( Bmat.begin(), Bmat.end(), TM::Zero() );
+      pigments.resize(Np); std::fill( pigments.begin(), pigments.end(), Eigen::Matrix<float, 7, 1>::Zero() );
+      diffusion_factor.resize(Np); std::fill( diffusion_factor.begin(), diffusion_factor.end(), 0.0 );
   }
 
+  std::vector<bool> active;
   std::vector<TV> x;
   std::vector<TV> v;
   std::vector<TV> pic;
@@ -39,6 +44,9 @@ public:
   std::vector<TM> F;
   std::vector<TM> Bmat;
 
+  // custom pigments base concentrations
+  std::vector<Eigen::Matrix<float, 7, 1>> pigments;
+  std::vector<T> diffusion_factor;
 };
 
 class Grid{
@@ -53,11 +61,27 @@ public:
     std::vector<TV> flip;
     std::vector<T> mass;
     std::vector<T> friction;
+    std::vector<T> shear_intensity;
     T xc;
     T yc;
     #ifdef THREEDIM
     T zc;
     #endif
+
+    // pigments concentrations
+    std::vector<Eigen::Matrix<float, 7, 1>> pigments;
+};
+
+struct ParticleNeighborhood {
+    unsigned int base_index[3]; // i_base, j_base, k_base
+    T weights[64];              // wip values (4x4x4 for 3D)
+    TV grads[64];               // grad_wip values
+};
+
+struct BlobModel {
+    std::string path;
+    float volume;
+    float calibration_factor; // Factor for converting between volume and parameter t
 };
 
 #endif // DATA_STRUCTURES_HPP

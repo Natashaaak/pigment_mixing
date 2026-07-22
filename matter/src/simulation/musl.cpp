@@ -12,6 +12,7 @@ void Simulation::MUSL(){
 
     #pragma omp parallel for schedule(static) num_threads(n_threads)
     for(int p=0; p<Np; p++){
+        if (!particles.active[p]) continue;
 
         //// Velicity is updated
         if (flip_ratio < -1){ // APIC
@@ -33,21 +34,22 @@ void Simulation::MUSL(){
 
         #pragma omp for nowait
         for(int p = 0; p < Np; p++){
+            if (!particles.active[p]) continue;
+
             TV xp = particles.x[p];
-            unsigned int i_base = std::max(0, int(std::floor((xp(0)-grid.xc)*one_over_dx)) - 1); // i_base = std::min(i_base, Nx-4); // the subtraction of one is valid for both quadratic and cubic splines
-            unsigned int j_base = std::max(0, int(std::floor((xp(1)-grid.yc)*one_over_dx)) - 1); // j_base = std::min(j_base, Ny-4);
+            const auto &pn = p_neighbors[p];
+            int count = 0;
         #ifdef THREEDIM
-            unsigned int k_base = std::max(0, int(std::floor((xp(2)-grid.zc)*one_over_dx)) - 1); // k_base = std::min(k_base, Nz-4);
         #endif
 
-            for(int i = i_base; i < i_base+4; i++){
+            for(int i = pn.base_index[0]; i < pn.base_index[0]+4; i++){
                 T xi = grid.x[i];
-                for(int j = j_base; j < j_base+4; j++){
+                for(int j = pn.base_index[1]; j < pn.base_index[1]+4; j++){
                     T yi = grid.y[j];
         #ifdef THREEDIM
-                    for(int k = k_base; k < k_base+4; k++){
+                    for(int k = pn.base_index[2]; k < pn.base_index[2]+4; k++){
                         T zi = grid.z[k];
-                        T weight = wip(xp(0), xp(1), xp(2), xi, yi, zi, one_over_dx);
+                        T weight = pn.weights[count++];
                         if (weight > 1e-25){
                             grid_v_local[ind(i,j,k)] += particles.v[p] * weight;
                             if (flip_ratio < 0){ // APIC
@@ -60,7 +62,7 @@ void Simulation::MUSL(){
                         }
                     } // end for k
         #else
-                    T weight = wip(xp(0), xp(1), xi, yi, one_over_dx);
+                    T weight = pn.weights[count++];
                     if (weight > 1e-25){
                         grid_v_local[ind(i,j)]     += particles.v[p] * weight;
                         if (flip_ratio < 0){ // APIC

@@ -1,0 +1,8 @@
+# .dockerignore
+**/*.obj
+**/*.vdb
+**/*.gif
+**/*.png
+**/.git
+**/.venv
+**/node_modules

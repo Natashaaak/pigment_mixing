@@ -3,17 +3,35 @@
 #include "simulation.hpp"
 
 void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
-
     // Make a copy
     TV vi_orig = vi;
 
     // New positions
     Xi += dt * vi; // recall Xi was passed by value
 
+    bool influenced_by_spatula = false;
+
+    // --- PREDICTIVE SPATULA DETECTION ---
+    // Create a detection zone (e.g., 2 * dx) around the spatula.
+    // If a particle (node) is in this zone, set influenced_by_spatula = true.
+    if (spatula_ptr != nullptr) {
+        Eigen::Vector4f worldPos;
+#ifdef THREEDIM
+        worldPos << (float)Xi(0), (float)Xi(1), (float)Xi(2), 1.0f;
+#else
+        worldPos << (float)Xi(0), 0.0f, (float)Xi(1), 1.0f;
+#endif
+        Eigen::Vector3f localPos = (spatula_ptr->invTransform.matrix() * worldPos).head<3>();
+        if (spatula_ptr->sdSpatula(localPos) < (T)(2.0 * dx)) {
+            influenced_by_spatula = true;
+        }
+    }
+
     for(auto& obj : objects) {
         bool colliding = obj->inside(Xi);
         if (colliding) {
-            TV v_rel = vi_orig;
+            TV v_obj = obj->velocity(Xi);
+            TV v_rel = vi_orig - v_obj;
 
             if (obj->bc == BC::NoSlip) {
                 v_rel.setZero();
@@ -69,7 +87,28 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                 return;
             }
 
-            vi = v_rel;
+            vi = v_rel + v_obj;
+
+            // We record that the spatula has influenced the particle and thus has priority
+            if (obj.get() == spatula_ptr) {
+                influenced_by_spatula = true;
+
+                // If the particle is in a critical zone near the bottom (risk of creating a thin film)
+                if (Xi(1) < 0.8 * dx) {
+                    TV n = obj->normal(Xi);
+                    
+                    // Universal calculation of the tangent vector pointing UP (for 2D and 3D)
+                    TV up = TV::Zero();
+                    up(1) = 1.0; // Global up direction
+                    TV t = up - up.dot(n) * n; // Projection of the Y-axis onto the tangent plane
+                    if (t.norm() > 1e-6) t.normalize();
+                    else t = TV::Zero(); // Just in case the normal is exactly (0,1,0)
+
+                    // Velocity: spatula velocity + "slip" upwards
+                    // 0.2 * v_obj.norm() determines how readily the paint slides on the spatula
+                    vi = v_obj + t * (0.2 * v_obj.norm());
+                }
+            }
 
             // update velocity copy before next iteration
             vi_orig = vi; // Comment this line to enforce ordering of objects (i.e., use only last object in list)
@@ -84,6 +123,16 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
     for (auto& obj : plates) {
         bool colliding = obj->inside(Xi);
         if (colliding) {
+            // SPATULA HAS PRIORITY: if a particle collides with the spatula, we ignore the floor friction (so the paint slides on it),
+            // but we must prevent particles from falling through the bottom.
+            if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
+                if (vi(1) < obj->vy_object) {
+                    vi(1) = obj->vy_object;
+                    vi_orig = vi;
+                }
+                continue;
+            }
+
             T vx_rel = vi_orig(0) - obj->vx_object;
             T vy_rel = vi_orig(1) - obj->vy_object;
             T vz_rel = vi_orig(2) - obj->vz_object;
@@ -114,8 +163,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vz_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vx_rel = sgn(vx_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vz_rel*vz_rel/(vx_rel*vx_rel));
-                        vz_rel = sgn(vz_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vx_rel*vx_rel/(vz_rel*vz_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vx_rel *= scale;
+                        vz_rel *= scale;
                     }
 
                     // normal component (y) must be set to zero
@@ -136,8 +186,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vz_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vy_rel = sgn(vy_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vz_rel*vz_rel/(vy_rel*vy_rel));
-                        vz_rel = sgn(vz_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vy_rel*vy_rel/(vz_rel*vz_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vy_rel *= scale;
+                        vz_rel *= scale;
                     }
 
                     // normal component (x) must be set to zero
@@ -158,8 +209,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vy_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vx_rel = sgn(vx_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vy_rel*vy_rel/(vx_rel*vx_rel));
-                        vy_rel = sgn(vy_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vx_rel*vx_rel/(vy_rel*vy_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vx_rel *= scale;
+                        vy_rel *= scale;
                     }
 
                     // normal component (z) must be set to zero
@@ -189,8 +241,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vz_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vx_rel = sgn(vx_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vz_rel*vz_rel/(vx_rel*vx_rel));
-                        vz_rel = sgn(vz_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vx_rel*vx_rel/(vz_rel*vz_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vx_rel *= scale;
+                        vz_rel *= scale;
                     }
 
                     // normal component (y) must be set to zero
@@ -210,8 +263,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vz_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vy_rel = sgn(vy_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vz_rel*vz_rel/(vy_rel*vy_rel));
-                        vz_rel = sgn(vz_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vy_rel*vy_rel/(vz_rel*vz_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vy_rel *= scale;
+                        vz_rel *= scale;
                     }
 
                     // normal component (x) must be set to zero
@@ -231,8 +285,9 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
                         vy_rel = 0;
                     }
                     else { // just reduce tangential component
-                        vx_rel = sgn(vx_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vy_rel*vy_rel/(vx_rel*vx_rel));
-                        vy_rel = sgn(vy_rel) * (vel_t - fric_vel_n) / std::sqrt(1 + vx_rel*vx_rel/(vy_rel*vy_rel));
+                        T scale = (vel_t - fric_vel_n) / vel_t;
+                        vx_rel *= scale;
+                        vy_rel *= scale;
                     }
 
                     // normal component (z) must be set to zero
@@ -267,6 +322,16 @@ void Simulation::boundaryCollision(int index, TV Xi, TV& vi){
     for (auto& obj : plates) {
         bool colliding = obj->inside(Xi);
         if (colliding) {
+            // SPATULA HAS PRIORITY: if a particle collides with the spatula, we ignore the floor friction,
+            // but we must prevent particles from falling through.
+            if (influenced_by_spatula && obj->plate_type == PlateType::bottom) {
+                if (vi(1) < obj->vy_object) {
+                    vi(1) = obj->vy_object;
+                    vi_orig = vi;
+                }
+                continue;
+            }
+
             T vx_rel = vi_orig(0) - obj->vx_object;
             T vy_rel = vi_orig(1) - obj->vy_object;
 

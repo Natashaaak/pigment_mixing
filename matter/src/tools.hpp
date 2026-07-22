@@ -16,8 +16,8 @@
 
 
 /////////////// USER PARAMETERS (GLOBAL) //////////
-typedef double T; // float or double
-// #define THREEDIM // Uncomment for 2D
+typedef float T; // float or double
+#define THREEDIM // Uncomment for 2D
 #define SPLINEDEG 2 // Quadratic B-spline
 // #define WARNINGS // Write more debug info to screen
 ///////////////////////////////////////////////////
@@ -48,6 +48,8 @@ typedef double T; // float or double
     typedef Eigen::Matrix<T, Eigen::Dynamic, 1> TVX;
     typedef Eigen::Array<T,2,1> TA;
 #endif
+
+typedef std::pair<T, TV> WeightData;
 ////////////////////////
 
 enum class PlateType { top, bottom, left, right, front, back };
@@ -238,6 +240,31 @@ inline T d2Ndu2(T u){
         return ( term1 + term2 + term3 ) * one_over_h_square;
     }
 
+    inline WeightData compute_w_and_grad(T xp, T yp, T zp, T xi, T yi, T zi, T one_over_h) {
+        WeightData data;
+        
+        const T ux = (xp - xi) * one_over_h;
+        const T uy = (yp - yi) * one_over_h;
+        const T uz = (zp - zi) * one_over_h;
+        
+        const T Nx = N(ux);
+        const T Ny = N(uy);
+        const T Nz = N(uz);
+        const T dNx = dNdu(ux);
+        const T dNy = dNdu(uy);
+        const T dNz = dNdu(uz);
+
+        // Weight 3D
+        data.first = Nx * Ny * Nz;
+
+        // Gradient 3D
+        data.second << dNx * Ny * Nz * one_over_h,
+                       Nx * dNy * Nz * one_over_h,
+                       Nx * Ny * dNz * one_over_h;
+
+        return data;
+    }
+
 #else // TWODIM
 
     inline T wip(T xp, T yp, T xi, T yi, T one_over_h){
@@ -251,20 +278,27 @@ inline T d2Ndu2(T u){
         return out;
     }
 
-    // inline T wip(T xp, T yp, T xi, T yi, T one_over_h){
-    //     T Lx = 0.1;
-    //     return N( fmod(xp - xi, Lx) * one_over_h ) * N( (yp - yi) * one_over_h );
-    // }
-    // inline TV grad_wip(T xp, T yp, T xi, T yi, T one_over_h){
-    //     T Lx = 0.1;
-    //     T xpminxi = xp-xi;
-    //     if (xpminxi <= -Lx || xpminxi >= Lx)
-    //         xpminxi = -fmod(xpminxi, Lx);
-    //     TV out;
-    //     out << dNdu( xpminxi  * one_over_h) * N((yp - yi) * one_over_h) * one_over_h,
-    //            dNdu((yp - yi) * one_over_h) * N( xpminxi  * one_over_h) * one_over_h;
-    //     return out;
-    // }
+    inline WeightData compute_w_and_grad(T xp, T yp, T xi, T yi, T one_over_h) {
+        WeightData data;
+        
+        // Helper variables to save function calls
+        const T ux = (xp - xi) * one_over_h;
+        const T uy = (yp - yi) * one_over_h;
+        
+        const T Nx = N(ux);
+        const T Ny = N(uy);
+        const T dNx = dNdu(ux);
+        const T dNy = dNdu(uy);
+
+        // Weight 2D
+        data.first = Nx * Ny;
+
+        // Gradient 2D
+        data.second << dNx * Ny * one_over_h,
+                    Nx * dNy * one_over_h;
+
+        return data;
+    }
 
     inline T laplace_wip(T xp, T yp, T xi, T yi, T one_over_h, T one_over_h_square){
         T term1 = d2Ndu2((xp - xi) * one_over_h) * N((yp - yi) * one_over_h);

@@ -17,6 +17,7 @@ if (USE_VDB)
       tests.cpp
       tests_vdb.cpp
       ../src/simulation/simulation.cpp
+			../src/simulation/simulation_units.cpp
       ../src/simulation/save_data.cpp
       ../src/simulation/remesh.cpp
       ../src/simulation/deformation_update.cpp
@@ -29,6 +30,8 @@ if (USE_VDB)
       ../src/simulation/position_update.cpp
       ../src/simulation/musl.cpp
       ../src/simulation/pbc.cpp
+			../src/simulation/precompute_weight.cpp
+      ../src/simulation/simulation_blobs.cpp
     )
 
 	set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
@@ -56,6 +59,7 @@ else (USE_VDB)
     add_executable(tests
       tests.cpp
       ../src/simulation/simulation.cpp
+      ../src/simulation/simulation_units.cpp
       ../src/simulation/save_data.cpp
       ../src/simulation/remesh.cpp
       ../src/simulation/deformation_update.cpp
@@ -68,6 +72,8 @@ else (USE_VDB)
       ../src/simulation/position_update.cpp
       ../src/simulation/musl.cpp
       ../src/simulation/pbc.cpp
+      ../src/simulation/precompute_weight.cpp
+      ../src/simulation/simulation_blobs.cpp
     )
 
 	target_link_libraries (tests GTest::gtest_main

@@ -6,69 +6,53 @@
 
 void Simulation::explicitEulerUpdate(){
 
-    #ifdef WARNINGS
-        debug("explicitEulerUpdate");
-    #endif
-
+    // Global force field - zeroed
     std::vector<TV> grid_force(grid_nodes, TV::Zero());
 
-    #pragma omp parallel num_threads(n_threads)
-    {
-        std::vector<TV> grid_force_local(grid_nodes, TV::Zero());
+    #pragma omp parallel for num_threads(n_threads)
+    for(int p = 0; p < Np; p++){
+        if (!particles.active[p]) continue;
 
-        #pragma omp for nowait
-        for(int p = 0; p < Np; p++){
+        const auto &pn = p_neighbors[p];
+        int count = 0;
 
-            TM Fe = particles.F[p];
+        TM Fe = particles.F[p];
+        TM dPsidF = (elastic_model == ElasticModel::NeoHookean) ? NeoHookeanPiola(Fe) : HenckyPiola(Fe);
+        TM tau = dPsidF * Fe.transpose();
 
-            TM dPsidF;
-            if (elastic_model == ElasticModel::NeoHookean){
-                dPsidF = NeoHookeanPiola(Fe);
+        for(int i = pn.base_index[0]; i < pn.base_index[0]+4; i++){
+            for(int j = pn.base_index[1]; j < pn.base_index[1]+4; j++){
+               
+                #ifdef THREEDIM
+                for(int k = pn.base_index[2]; k < pn.base_index[2]+4; k++){
+                    unsigned int index = ind(i, j, k);
+                    const TV& grad = pn.grads[count++];
+                    if (grid.mass[index] > 0){
+                        TV f_p = tau * grad;
+                        #pragma omp atomic
+                        grid_force[index](0) += f_p(0);
+                        #pragma omp atomic
+                        grid_force[index](1) += f_p(1);
+                        #pragma omp atomic
+                        grid_force[index](2) += f_p(2);
+                    }
+                }
+                #else
+                unsigned int index = ind(i, j);
+                const TV& grad = pn.grads[count++]; // Precomputed gradient
+
+                if (grid.mass[index] > 0){ // Force contribution from particle
+                    TV f_p = tau * grad; // Force contribution from particle
+                    // Atomic write by components (prevents race condition)
+                    #pragma omp atomic
+                    grid_force[index](0) += f_p(0);
+                    #pragma omp atomic
+                    grid_force[index](1) += f_p(1);
+                }
+                #endif
             }
-            else if (elastic_model == ElasticModel::Hencky){ // St Venant Kirchhoff with Hencky strain
-                dPsidF = HenckyPiola(Fe);
-            }
-            else{
-                debug("You specified an unvalid ELASTIC model!");
-            }
-
-            TM tau = dPsidF * Fe.transpose();
-
-            TV xp = particles.x[p];
-            unsigned int i_base = std::max(0, int(std::floor((xp(0)-grid.xc)*one_over_dx)) - 1); // i_base = std::min(i_base, Nx-4); // the subtraction of one is valid for both quadratic and cubic splines
-            unsigned int j_base = std::max(0, int(std::floor((xp(1)-grid.yc)*one_over_dx)) - 1); // j_base = std::min(j_base, Ny-4);
-        #ifdef THREEDIM
-            unsigned int k_base = std::max(0, int(std::floor((xp(2)-grid.zc)*one_over_dx)) - 1); // k_base = std::min(k_base, Nz-4);
-        #endif
-
-            for(int i = i_base; i < i_base+4; i++){
-                T xi = grid.x[i];
-                for(int j = j_base; j < j_base+4; j++){
-                    T yi = grid.y[j];
-        #ifdef THREEDIM
-                    for(int k = k_base; k < k_base+4; k++){
-                        T zi = grid.z[k];
-                        if ( grid.mass[ind(i,j,k)] > 0){
-                            grid_force_local[ind(i,j,k)] += tau * grad_wip(xp(0), xp(1), xp(2), xi, yi, zi, one_over_dx);
-                        } // end if non-zero grid mass
-                    } // end for k
-        #else
-                    if ( grid.mass[ind(i,j)] > 0){
-                        grid_force_local[ind(i,j)] += tau * grad_wip(xp(0), xp(1), xi, yi, one_over_dx);
-                    } // end if non-zero grid mass
-        #endif
-                 } // end for j
-             } // end for i
-        } // end for particles
-
-        #pragma omp critical
-        {
-            for (int l = 0; l<grid_nodes; l++){
-                grid_force[l] += grid_force_local[l];
-            } // end for l
-        } // end omp critical
-
-    } // end omp parallel
+        }
+    }
 
     //////////// if external grid gravity: //////////////////
     // std::pair<TMX, TMX> external_gravity_pair = createExternalGridGravity();

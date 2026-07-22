@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     libxinerama-dev \
     libxrandr-dev \
     libxi-dev \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install vcpkg into /opt
@@ -44,7 +45,7 @@ ENV PATH="${PATH}:${VCPKG_ROOT}"
 WORKDIR /workspace
 
 # Copy vcpkg dependencies
-COPY raytracing/vcpkg.json /workspace/vcpkg.json
+COPY vcpkg.json /workspace/vcpkg.json
 
 # Install libraries
 RUN vcpkg install --x-install-root=/workspace/vcpkg_installed

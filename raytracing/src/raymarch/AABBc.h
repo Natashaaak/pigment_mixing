@@ -12,17 +12,17 @@
 #define AABBC_H
 #include <glm/vec3.hpp>
 
-#include "sph/SPHIntegrationSim.h"
+#include "mpm/MPMIntegrationSim.h"
 
 
 class AABBc {
 public:
     /**
      * Creates boundary box object of the current scene, with computing voxels amount and size, needed for BDG
-     * @param spph simulation
+     * @param mpm simulation
      * @param scene scene number from 3 predifined scenes
      */
-    AABBc(SPHIntegrationSim *spph, int scene);
+    AABBc(MPMIntegrationSim *mpm);
     float voxelS = 0;
     glm::vec3 gridStart = glm::vec3(0);
     glm::uint cellsX = 0, cellsY = 0, cellsZ = 0;
@@ -33,13 +33,12 @@ public:
      * @return
      */
     [[nodiscard]] glm::uint getSize() const;
-private:
     /**
      * Chooses what boundary to use depending on the scene and computes all the parameters
-     * @param spph simulation
-     * @param scene number of the scene
+     * @param mpm simulation
      */
-    void fixedAABB(SPHIntegrationSim *spph, int scene);
+    void fixedAABB(MPMIntegrationSim *mpm);
+// private:
 };
 
 
