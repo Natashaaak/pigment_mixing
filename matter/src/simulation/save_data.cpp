@@ -357,13 +357,13 @@ void Simulation::saveInfo(){
 
 void Simulation::saveTiming(){
 
+    T steps = current_time_step > 0 ? (T)current_time_step : 1.0;
     std::ofstream timeFile(directory + sim_name + "/info_timing.txt");
-    timeFile << current_time_step          << "\n"   // 0
-             << runtime_total / ((T)1000)  << "\n"   // 1
-             << runtime_p2g                << "\n"   // 2
-             << runtime_g2p                << "\n"   // 3
-             << runtime_euler              << "\n"   // 4
-             << runtime_defgrad            << "\n";  // 5
+    timeFile << current_time_step                  << "\n"   // 0
+             << (runtime_total / ((T)1000)) / steps << "\n"   // 1
+             << runtime_p2g / steps                << "\n"   // 2
+             << runtime_g2p / steps                << "\n"   // 3
+             << runtime_euler / steps              << "\n"   // 4
+             << runtime_defgrad / steps            << "\n";  // 5
     timeFile.close();
 }
-

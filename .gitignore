@@ -4,10 +4,18 @@ bin/
 
 # Simulations output
 **/output/
+**/output_images/
 **/results/
+# Installed dependencies
+vcpkg_installed/
 
-# Dependencies (for Matter)
-**/deps/
+# External/submodule dependencies
+# Ignoruj celý adresář /deps...
+/deps/
+# ...ale ponech v něm soubor json.hpp
+!/deps/json.hpp
+matter/deps/
+raytracing/external/
 
 # Executables & Libraries
 *.exe
@@ -26,9 +34,13 @@ bin/
 .DS_Store
 
 *:Zone.Identifier
+matter/**/*.obj
 
 # CMake cache
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
+log.log
+
+.VSCodeCounter/

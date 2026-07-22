@@ -1,0 +1,11 @@
+{
+    "cfl": 0.05,
+    "flip_ratio": -0.5,
+    "E": 500000.0,
+    "nu": 0.2,
+    "rho": 1000.0,
+    "friction_angle": 5.0,
+    "q_cohesion": 500.0,
+    "perzyna_exp": 1.0,
+    "perzyna_visc": 0.4
+}

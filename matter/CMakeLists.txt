@@ -4,10 +4,15 @@ project(matter)
 
 enable_testing()
 
-add_subdirectory(src)
-add_subdirectory(tests)
+add_compile_options(-O3 -ffast-math -fopenmp)
 
-option (USE_VDB "Use OpenVDB part of the code" OFF)
+option (USE_VDB "Use OpenVDB part of the code" ON)
+if(USE_VDB)
+    link_libraries(openvdb tbb)
+endif()
+
+add_subdirectory(src)
+# add_subdirectory(tests)
 
 #### Download header files from external Github repos ####
 

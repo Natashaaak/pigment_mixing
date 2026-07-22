@@ -14,51 +14,62 @@ void Simulation::P2G(){
         std::vector<TV> grid_v_local(grid_nodes, TV::Zero() );
         std::vector<T> grid_mass_local(grid_nodes);
         std::vector<T> grid_friction_local(grid_nodes);
+        std::vector<Eigen::Matrix<float, 7, 1>> grid_pigments_local(grid_nodes, Eigen::Matrix<float, 7, 1>::Zero());
+        std::vector<T> grid_shear_intensity_local(grid_nodes, 0.0);
 
         #pragma omp for nowait
         for(int p = 0; p < Np; p++){
-            TV xp = particles.x[p];
-            unsigned int i_base = std::max(0, int(std::floor((xp(0)-grid.xc)*one_over_dx)) - 1); // i_base = std::min(i_base, Nx-4); // the subtraction of one is valid for both quadratic and cubic splines
-            unsigned int j_base = std::max(0, int(std::floor((xp(1)-grid.yc)*one_over_dx)) - 1); // j_base = std::min(j_base, Ny-4);
-        #ifdef THREEDIM
-            unsigned int k_base = std::max(0, int(std::floor((xp(2)-grid.zc)*one_over_dx)) - 1); // k_base = std::min(k_base, Nz-4);
-        #endif
+            if (!particles.active[p]) continue;
 
-            for(int i = i_base; i < i_base+4; i++){
+            TV xp = particles.x[p];
+            const auto &pn = p_neighbors[p];
+            int count = 0;
+
+            for(int i = pn.base_index[0]; i < pn.base_index[0]+4; i++){
                 T xi = grid.x[i];
-                for(int j = j_base; j < j_base+4; j++){
+                for(int j = pn.base_index[1]; j < pn.base_index[1]+4; j++){
                     T yi = grid.y[j];
         #ifdef THREEDIM
-                    for(int k = k_base; k < k_base+4; k++){
+                    for(int k = pn.base_index[2]; k < pn.base_index[2]+4; k++){
                         T zi = grid.z[k];
-                        T weight = wip(xp(0), xp(1), xp(2), xi, yi, zi, one_over_dx);
+                        unsigned int index = ind(i, j, k);
+                        T weight = pn.weights[count];
+                        const TV& grad = pn.grads[count];
+                        count++;
                         if (weight > 1e-25){
-                            grid_mass_local[ind(i,j,k)]  += weight;
-                            grid_v_local[ind(i,j,k)]     += particles.v[p] * weight;
+                            grid_mass_local[index]  += weight;
+                            grid_v_local[index]     += particles.v[p] * weight;
+                            grid_pigments_local[index] += particles.pigments[p] * weight;
+                            grid_shear_intensity_local[index] += particles.diffusion_factor[p] * weight;
                             if (flip_ratio < 0){ // APIC
                                 TV posdiffvec = TV::Zero();
                                 posdiffvec(0) = xi-xp(0);
                                 posdiffvec(1) = yi-xp(1);
                                 posdiffvec(2) = zi-xp(2);
-                                grid_v_local[ind(i,j,k)] += particles.Bmat[p] * posdiffvec * apicDinverse * weight;
+                                grid_v_local[index] += particles.Bmat[p] * posdiffvec * apicDinverse * weight;
                             }
                             if (use_mibf)
-                                grid_friction_local[ind(i,j,k)] += particles.muI[p] * weight;
+                                grid_friction_local[index] += particles.muI[p] * weight;
                         }
                     } // end for k
         #else
-                    T weight = wip(xp(0), xp(1), xi, yi, one_over_dx);
+                    unsigned int index = ind(i, j);
+                    T weight = pn.weights[count];
+                    const TV& grad = pn.grads[count];
+                    count++;
                     if (weight > 1e-25){
-                        grid_mass_local[ind(i,j)]  += weight;
-                        grid_v_local[ind(i,j)]     += particles.v[p] * weight;
+                        grid_mass_local[index]  += weight;
+                        grid_v_local[index]     += particles.v[p] * weight;
+                        grid_pigments_local[index] += particles.pigments[p] * weight;
+                        grid_shear_intensity_local[index] += particles.diffusion_factor[p] * weight;
                         if (flip_ratio < 0){ // APIC
                             TV posdiffvec = TV::Zero();
                             posdiffvec(0) = xi-xp(0);
                             posdiffvec(1) = yi-xp(1);
-                            grid_v_local[ind(i,j)] += particles.Bmat[p] * posdiffvec * apicDinverse * weight;
+                            grid_v_local[index] += particles.Bmat[p] * posdiffvec * apicDinverse * weight;
                         }
                         if (use_mibf)
-                            grid_friction_local[ind(i,j)] += particles.muI[p] * weight;
+                            grid_friction_local[index] += particles.muI[p] * weight;
                     }
         #endif
                 } // end for j
@@ -70,6 +81,8 @@ void Simulation::P2G(){
             for (int l = 0; l<grid_nodes; l++){
                 grid.mass[l]          += grid_mass_local[l];
                 grid.v[l]             += grid_v_local[l];
+                grid.pigments[l]      += grid_pigments_local[l];
+                grid.shear_intensity[l] += grid_shear_intensity_local[l];
                 if (use_mibf)
                     grid.friction[l]  += grid_friction_local[l];
             } // end for l
@@ -84,10 +97,23 @@ void Simulation::P2G(){
     #pragma omp parallel for num_threads(n_threads)
     for (int l = 0; l<grid_nodes; l++){
         T mi = grid.mass[l];
-        if (mi > 0)
+        if (mi > 0) {
             grid.v[l] /= mi;
-        else
+            grid.pigments[l] /= mi;
+            grid.shear_intensity[l] /= mi;
+
+            // Normalize pigments on the grid for robustness against numerical errors.
+            // This ensures that the data transferred back to the particles in the G2P step is also clean.
+            float pigment_sum = grid.pigments[l].head<4>().sum();
+            // Since we are working only with opaque pigments, their sum should always be 1.
+            if (pigment_sum > 1e-6f) {
+                grid.pigments[l].head<4>() /= pigment_sum;
+            }
+        } else {
             grid.v[l].setZero();
+            grid.pigments[l].setZero();
+            grid.shear_intensity[l] = 0.0;
+        }
         //grid.v[l] = (mi > 0) ? grid.v[l]/mi : TV::Zero(); // condition ? result_if_true : result_if_false
         if (use_mibf)
             grid.friction[l] /= mi;

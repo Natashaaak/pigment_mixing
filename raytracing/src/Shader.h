@@ -11,6 +11,7 @@
 
 #ifndef SHADER_H
 #define SHADER_H
+#include <vector>
 #include <string>
 #include <filesystem>
 
@@ -91,8 +92,22 @@ public:
         else if constexpr (std::is_same_v<T, glm::vec3>) {
             glUniform3fv(location, 1, &value[0]); //uniform3fv takes first value of vec3
         }
+        else if constexpr (std::is_same_v<T, glm::vec4>) {
+            glUniform4fv(location, 1, &value[0]);
+        }
+        else if constexpr (std::is_same_v<T, std::vector<glm::vec3>>) {
+            if (!value.empty())
+                glUniform3fv(location, value.size(), &value[0][0]);
+        }
+        else if constexpr (std::is_same_v<T, std::vector<float>>) {
+            if (!value.empty())
+                glUniform1fv(location, value.size(), value.data());
+        }
         else if constexpr (std::is_same_v<T, glm::mat4>) {
             glUniformMatrix4fv(location, 1, GL_FALSE, &value[0][0]);
+        }
+        else if constexpr (std::is_same_v<T, glm::mat3>) {
+            glUniformMatrix3fv(location, 1, GL_FALSE, &value[0][0]);
         }
         else if constexpr (std::is_same_v<T, glm::ivec3>) {
             glUniform3iv(location, 1, &value[0]);
@@ -141,32 +156,62 @@ private:
      * @return string with the file contents
      */
     std::string fileReader(const char* filePath) {
-        std::ifstream file(filePath, std::ios::in | std::ios::binary);
+        std::string resolvedPath = filePath;
+        std::ifstream file(resolvedPath, std::ios::in | std::ios::binary);
 
         // If shader not found, repair path with defined macro from CMake
-        if (!file && std::string(filePath).find("..") != std::string::npos) {
+        if (!file && resolvedPath.find("..") != std::string::npos) {
 #ifdef EXTERNAL_SHADER_PATH
-        // Parse file name
-        std::string originalPath = filePath;
-        size_t pos = originalPath.find("shaders/");
-        std::string relativeSubPath = (pos != std::string::npos) 
-                                      ? originalPath.substr(pos + 8) // +8 skip "shaders/"
-                                      : originalPath;
+            // Parse file name
+            size_t pos = resolvedPath.find("shaders/");
+            std::string relativeSubPath = (pos != std::string::npos) 
+                                          ? resolvedPath.substr(pos + 8) // +8 skip "shaders/"
+                                          : resolvedPath;
 
-        std::string absolutePath = std::string(EXTERNAL_SHADER_PATH) + "/" + relativeSubPath;
-        
-        // Try once again
-        file.open(absolutePath, std::ios::in | std::ios::binary);
+            resolvedPath = std::string(EXTERNAL_SHADER_PATH) + "/" + relativeSubPath;
+            
+            // Try once again
+            file.clear(); 
+            file.open(resolvedPath, std::ios::in | std::ios::binary); // Necessary to clear the stream's failbit before another attempt to open
 #endif
-    }
+        }
 
         if (!file) {
-            spdlog::error("File cannot be opened: {}", filePath);
+            spdlog::error("File cannot be opened: {}", resolvedPath);
             throw std::runtime_error("File reading error at shader compilation");
         }
 
+        // Extract the directory to know where to look for included files relatively
+        std::string directory;
+        size_t lastSlash = resolvedPath.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            directory = resolvedPath.substr(0, lastSlash + 1);
+        }
+
         std::ostringstream contents;
-        contents << file.rdbuf();
+        std::string line;
+        while (std::getline(file, line)) {
+            // Simple parser for #include "path/to/file"
+            size_t includePos = line.find("#include");
+            // Execute only if the line does not contain a comment before the include
+            if (includePos != std::string::npos && line.find("//") > includePos) {
+                size_t firstQuote = line.find('\"', includePos);
+                size_t secondQuote = line.find('\"', firstQuote + 1);
+                if (firstQuote != std::string::npos && secondQuote != std::string::npos) {
+                    std::string includeFilename = line.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+                    std::string fullIncludePath = directory + includeFilename;
+                    
+                    std::string includedContent = fileReader(fullIncludePath.c_str());
+                    if (includedContent.empty()) {
+                        spdlog::warn("WARNING: Included file is empty or was not loaded: {}", fullIncludePath);
+                    }
+                    // Recursive call to insert content
+                    contents << includedContent << "\n";
+                    continue;
+                }
+            }
+            contents << line << "\n";
+        }
         file.close();
 
         return contents.str();

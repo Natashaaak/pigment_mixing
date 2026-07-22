@@ -1,0 +1,39 @@
+Camera position loaded from config: (0, 3.5, -2)
+--- Starting Simulation ---
+  - {Hansa Yellow Opaque}: 0.55
+  - {Cadmium Yellow}: 0.45
+---------------------------
+-----------------------------------------------------------------------------------
+    88b           d88                                                              
+    888b         d888                  aa          aa                              
+    88 8b       d8 88                  88          88                              
+    88  8b     d8  88   adPPYYba   aaaa88aaaa  aaaa88aaaa    adPPYba   8b dPPYba   
+    88   8b   d8   88  aa      Y8  aaaa88aaaa  8888888888  a8P     88  88P     Y8  
+    88    8b d8    88   adPPPPP88      88          88      adPPPPP88   88          
+    88     888     88  88      88      aa          aa      a8b         88          
+    88      8      88    adPPYba                            adPPYba    88          
+-----------------------------------------------------------------------------------
+Loaded pigment config successfully.
+Loaded simulation config successfully.
+Sampling particles from multiple VDB objects...
+    Object 0: 127988 square samples, 18092 new particles.
+    Object 1: 128079 square samples, 14725 new particles.
+  Total particles sampled: 32817
+  Final dx: 0.0358083918691
+Loaded animation ../matter/animations/spatula_motion.bin with 3601 frames
+Init particles done
+
+This is a 3D simulation.
+Using quadratic splines.
+Loaded OBJ: data/spatula_handler.obj with 326592 vertices.
+HDR Cubemap and Irradiance map generated successfully for: data/SkyMap.hdr
+Simulation is running
+Frame 1 done.
+Frame 2 done.
+Frame 3 done.
+Frame 4 done.
+
+--------------------------------------------------
+Final Mixed Color (from 6416 particles sampled):
+R: 0.965547800064, G: 0.843302130699, B: 0.0299331620336
+--------------------------------------------------
