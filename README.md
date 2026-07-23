@@ -47,6 +47,8 @@ The following example shows the initial state and the process of mixing blue and
   <img src="results/green_238.png" alt="Mixing yellow and blue" width="49%">
 </p>
 
+https://github.com/user-attachments/assets/d519a65f-ca41-417f-a1c2-7af8e181ea52
+
 ## Third-Party Work
 
 This project combines and extends three existing projects. They provide the foundations for the physical simulation, rendering, and pigment mixing components.
