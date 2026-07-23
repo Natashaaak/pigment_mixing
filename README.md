@@ -15,7 +15,7 @@ The main goals of the thesis were to:
 - represent the non-Newtonian and viscoplastic behavior of real acrylic paint,
 - simulate pigment mixing instead of directly interpolating RGB colors,
 - reconstruct and render the simulated paint surface,
-- - use rheological measurements to characterize the behavior of real acrylic paint and inform the simulation parameters,
+- use rheological measurements to characterize the behavior of real acrylic paint and inform the simulation parameters,
 - and evaluate the resulting pigment mixtures using spectral measurements.
 
 The final solution combines a Material Point Method (MPM) simulation, pigment-based color mixing, and a ray-marching renderer.
